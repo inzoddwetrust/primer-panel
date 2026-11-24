@@ -192,7 +192,10 @@ onBeforeUnmount(() => clearInterval(timer))
       <p v-if="runs.length === 0" data-test="no-runs">{{ t('server.no_runs') }}</p>
       <ul data-test="runs">
         <li v-for="run in runs" :key="run.run_id" :data-test="`run-${run.run_id}`">
-          {{ run.verb ?? t('fleet.no_data') }} · {{ run.started_at ?? t('fleet.no_data') }} ·
+          <RouterLink :to="{ name: 'run', params: { serverId, runId: run.run_id } }">
+            {{ run.verb ?? t('fleet.no_data') }} · {{ run.started_at ?? t('fleet.no_data') }}
+          </RouterLink>
+          ·
           <span v-if="run.running" data-test="running">{{ t('server.running') }}</span>
           <span v-else-if="run.verdict">
             {{ run.verdict.result }}

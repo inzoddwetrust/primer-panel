@@ -31,6 +31,12 @@ host:
   domains: [frontend, api]
   routes:
     frontend: { to: "frontend:80" }
-    api:      { to: "app:8000", max_body: 1M }
+    api:
+      to: "app:8000"
+      max_body: 1M
+      paths:
+        # the stream of a run's lines (SSE, DM-156): passed on as it comes;
+        # a keepalive every 15 s keeps the read under 120 s
+        /api/v1/streams/: { read_timeout: 120s, buffering: false }
 
 report: { health: /health, ready: /ready, logs: json, junit: false }

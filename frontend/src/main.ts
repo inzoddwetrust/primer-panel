@@ -8,6 +8,7 @@ import { loadConfig } from './config'
 import { RUNTIME_CONFIG } from './config-key'
 import { createPanelI18n } from './i18n'
 import { createPanelRouter, guard } from './router'
+import { STREAM } from './run'
 import { useMeStore } from './stores/me'
 import { BUILT_IN, FALLBACK_LANGUAGE, chooseLanguage } from './texts'
 
@@ -43,7 +44,9 @@ export async function start(): Promise<void> {
         () => me.me?.is_superadmin === true,
       ),
     )
-    app.provide(API_CLIENT, api).provide(RUNTIME_CONFIG, config).use(router)
+    // A run's stream, with the session's cookie (DM-156)
+    const stream = (url: string) => new EventSource(url, { withCredentials: true })
+    app.provide(API_CLIENT, api).provide(RUNTIME_CONFIG, config).provide(STREAM, stream).use(router)
     app.mount('#app')
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

@@ -144,5 +144,20 @@
     "running": "running",
     "required": "Fill the required fields.",
     "bad_json": "A field is not valid JSON."
+  },
+  "run": {
+    "status": {
+      "running": "running",
+      "finished": "finished",
+      "abandoned": "abandoned: stopped without a verdict",
+      "silent": "the box is silent"
+    },
+    "repeat": "Repeat",
+    "repeat_from_card": "Repeat it from the server's card",
+    "copy": "Copy for an LLM",
+    "steps": "Steps",
+    "log": "Log",
+    "no_log": "No log.",
+    "show_all": "Show all"
   }
 }

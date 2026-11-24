@@ -24,6 +24,14 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- A run (DM-156): `/servers/:serverId/runs/:runId` -- its ladder of steps
+  live, its log, its verdict, "repeat" and "copy for an LLM" (the report the
+  box sent in the envelope, byte for byte). The lines come as server-sent
+  events from `GET /api/v1/streams/servers/{id}/runs/{run_id}` -- `id` is the
+  line's `seq`, `Last-Event-ID` goes on, a gap waits for its line; the path
+  `/api/v1/streams/` has `buffering: false` and `read_timeout: 120s` on the
+  route. The state of a run -- running, finished, abandoned, a silent box --
+  is the box's fields (`app/runs/status.py`).
 - A server's card (DM-155): `/servers/:serverId` -- its head (the fleet's
   row), what stands on it as the box measured it, its runs, and the verbs of
   the machine's registry as buttons (`GET /api/v1/servers/{id}/verbs`): each
