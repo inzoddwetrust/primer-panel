@@ -11,6 +11,7 @@ from pridem.verbs import VERBS
 
 from app.access.actions import ACTION_PERMISSION, MACHINE_VERBS, Action, ByRole
 from app.access.actor import current_actor, current_identity
+from app.access.login import router as login_router
 from app.access.permissions import ALL, Permission
 from app.access.router import router
 from app.access.rules import AnyActor, Rule
@@ -94,6 +95,13 @@ def _no_object_cases(w: World) -> dict[tuple[str, str], tuple[str, str, object, 
         ("POST", "/panel-grants/{grant_id}/revoke"): (
             "POST",
             f"/panel-grants/{w.grants['admin_b']}/revoke",
+            None,
+            403,
+        ),
+        # Added by DM-150: the superadmin's alone, as the grants.
+        ("POST", "/users/{user_id}/deactivate"): (
+            "POST",
+            f"/users/{staff_b}/deactivate",
             None,
             403,
         ),
@@ -207,11 +215,13 @@ def test_probe_DM_149_every_action_has_a_permission() -> None:
     assert used == ALL
 
     # Every route of the API has exactly one access rule, and the person comes
-    # to it only through current_actor.
-    counted = _rules_of(router.routes)
-    assert len(counted) == len(_routes()) > 0
+    # to it only through current_actor. Changed by DM-150: every router of the
+    # application -- the routes of sign-in too.
+    every = [*router.routes, *login_router.routes]
+    counted = _rules_of(every)
+    assert len(counted) == len(_routes()) + 3 > 3
     assert set(counted.values()) == {1}, counted
-    for route in router.routes:
+    for route in every:
         assert isinstance(route, APIRoute)
         assert not _identity_outside_actor(route.dependant), route.path
 

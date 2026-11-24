@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, Request
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.access.comms import CommsClient
 from app.config import Settings
 
 
@@ -24,6 +25,8 @@ class Core:
     engine: AsyncEngine
     sessions: async_sessionmaker[AsyncSession]
     redis: Redis
+    # The sign-in module of comms; None until comms is connected (DM-160).
+    comms: CommsClient | None
 
 
 def install(app: FastAPI, core: Core) -> None:
@@ -49,3 +52,8 @@ def get_settings(core: Annotated[Core, Depends(get_core)]) -> Settings:
 def get_redis(core: Annotated[Core, Depends(get_core)]) -> Redis:
     """The Redis client of the application."""
     return core.redis
+
+
+def get_comms(core: Annotated[Core, Depends(get_core)]) -> CommsClient | None:
+    """The comms client of the application, if comms is connected."""
+    return core.comms

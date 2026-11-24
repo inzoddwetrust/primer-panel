@@ -4,6 +4,9 @@ Changed by DM-148: ``DATABASE_URL`` and ``REDIS_URL`` are fields of the
 settings now -- required, non-empty, and never shown.
 
 Changed by DM-149: ``SUPERADMIN_TELEGRAM_ID`` -- required, a positive integer.
+
+Changed by DM-150: ``DOMAIN_FRONTEND`` and ``DOMAIN_API`` -- required host
+names; ``COMMS_API_URL`` and ``COMMS_SERVICE_TOKEN`` -- optional until DM-160.
 """
 
 import pytest
@@ -21,6 +24,8 @@ GOOD = {
     "DATABASE_URL": DATABASE,
     "REDIS_URL": REDIS,
     "SUPERADMIN_TELEGRAM_ID": "7000000001",
+    "DOMAIN_FRONTEND": "primer.team",
+    "DOMAIN_API": "api.primer.team",
 }
 
 
@@ -36,6 +41,9 @@ def test_the_environment_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.database_url.get_secret_value() == DATABASE
     assert settings.redis_url.get_secret_value() == REDIS
     assert settings.superadmin_telegram_id == 7000000001
+    assert settings.frontend_origin == "https://primer.team"
+    assert settings.api_origin == "https://api.primer.team"
+    assert settings.comms_connected is False
 
 
 @pytest.mark.parametrize(
@@ -51,11 +59,28 @@ def test_the_environment_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
         ("SUPERADMIN_TELEGRAM_ID", "0"),
         ("SUPERADMIN_TELEGRAM_ID", "-5"),
         ("SUPERADMIN_TELEGRAM_ID", "abc"),
+        ("DOMAIN_FRONTEND", "https://primer.team"),
+        ("DOMAIN_FRONTEND", "primer.team/x"),
+        ("DOMAIN_API", "api.primer.team:443"),
+        ("DOMAIN_API", "localhost"),
+        ("DOMAIN_API", "API.primer.team"),
+        ("COMMS_API_URL", "comms:8000"),
     ],
 )
 def test_an_unknown_or_empty_value_names_its_variable(name: str, value: str) -> None:
     with pytest.raises(ValidationError, match=name):
         Settings.model_validate({**GOOD, name: value})
+
+
+def test_comms_is_connected_with_both_its_values() -> None:
+    both = {
+        **GOOD,
+        "COMMS_API_URL": "http://comms-comms-app:8000",
+        "COMMS_SERVICE_TOKEN": "invented-service-token-0001",
+    }
+    assert Settings.model_validate(both).comms_connected is True
+    one = {**GOOD, "COMMS_API_URL": "http://comms-comms-app:8000"}
+    assert Settings.model_validate(one).comms_connected is False
 
 
 @pytest.mark.parametrize("name", sorted(GOOD))

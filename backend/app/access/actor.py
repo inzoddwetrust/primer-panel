@@ -1,10 +1,10 @@
 """Who acts: ``current_identity`` and ``current_actor``.
 
 ``current_identity`` is the one place a route learns who is there: the
-Telegram id of a confirmed person. Until the Panel's sign-in exists (DM-150:
-sessions over the identity of comms) it refuses every request with
-``unauthorized``; tests put a stand-in in its place. There is no temporary
-sign-in by a header: such a hole would live to production.
+Telegram id of a confirmed person, read from the Panel's session (DM-150,
+``app.access.sessions``): the cookie ``panel_session`` names a valid session
+or the request is ``unauthorized``. Redis not answering is ``unavailable``
+(503): no session is ever taken without it. There is no sign-in by a header.
 
 ``current_actor`` turns the identity into the person of the Panel:
 
@@ -24,12 +24,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import select
 
+from app.access import sessions
 from app.access.models import User
 from app.core.errors import ErrorClass, PanelError
-from app.core.state import Core, get_core
+from app.core.state import Core, get_core, get_redis
 
 
 @dataclass(frozen=True)
@@ -48,9 +51,20 @@ class Actor:
     is_superadmin: bool
 
 
-async def current_identity() -> Identity:
-    """The person signed in; until DM-150 -- nobody."""
-    raise PanelError(ErrorClass.UNAUTHORIZED, "Sign-in is not available yet")
+async def current_identity(
+    request: Request, redis: Annotated[Redis, Depends(get_redis)]
+) -> Identity:
+    """The person of the request's session."""
+    token = request.cookies.get(sessions.COOKIE)
+    if not token:
+        raise PanelError(ErrorClass.UNAUTHORIZED, "Sign in")
+    try:
+        person = await sessions.person_of(redis, token)
+    except RedisError as error:
+        raise PanelError(ErrorClass.UNAVAILABLE, "Sessions are unavailable") from error
+    if person is None:
+        raise PanelError(ErrorClass.UNAUTHORIZED, "Sign in")
+    return Identity(telegram_id=person.telegram_id)
 
 
 async def current_actor(

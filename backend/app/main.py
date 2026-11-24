@@ -13,9 +13,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
 
+import httpx
 from fastapi import FastAPI
 from starlette.types import ASGIApp
 
+from app.access.comms import CommsClient
+from app.access.login import router as login_router
 from app.access.router import router as access_router
 from app.access.startup import check_at_start
 from app.config import Settings
@@ -41,13 +44,30 @@ MAX_UPLOAD_MB = 1
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None) -> ASGIApp:
-    """Build the app; the settings default to the environment."""
+def create_app(
+    settings: Settings | None = None,
+    comms_transport: httpx.AsyncBaseTransport | None = None,
+) -> ASGIApp:
+    """Build the app; the settings default to the environment.
+
+    ``comms_transport`` is the seam of the tests: a stand-in of comms' sign-in
+    module by its form. The application itself has none (DM-150)."""
     settings = settings or Settings()
     engine = make_engine(settings.database_url.get_secret_value())
     redis = make_redis(settings.redis_url.get_secret_value())
+    comms = None
+    if settings.comms_api_url and settings.comms_service_token is not None:
+        comms = CommsClient(
+            settings.comms_api_url,
+            settings.comms_service_token.get_secret_value(),
+            comms_transport,
+        )
     core = Core(
-        settings=settings, engine=engine, sessions=make_sessions(engine), redis=redis
+        settings=settings,
+        engine=engine,
+        sessions=make_sessions(engine),
+        redis=redis,
+        comms=comms,
     )
     head = script_head()
 
@@ -63,11 +83,13 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             },
         )
         try:
-            await check_at_start(engine, settings, head)
+            await check_at_start(engine, redis, settings, head)
             yield
         finally:
             await engine.dispose()
             await redis.aclose()
+            if comms is not None:
+                await comms.aclose()
 
     # No /docs, /redoc or /openapi.json: the API's own description is not
     # served on the API's domain (DM-149).
@@ -81,6 +103,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     install(app, core)
     install_error_handlers(app)
     app.include_router(access_router)
+    app.include_router(login_router)
     report = PrimerReport(
         service=SERVICE,
         release=settings.release,

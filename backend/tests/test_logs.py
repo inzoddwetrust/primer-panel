@@ -57,6 +57,8 @@ def _serve_and_log(
         REDIS_URL=redis_url,
         EDITION="core",
         SUPERADMIN_TELEGRAM_ID="7000000001",
+        DOMAIN_FRONTEND="panel.example.test",
+        DOMAIN_API="api.panel.example.test",
         PRIMER_RELEASE=RELEASE,
         PRIMER_COMMIT=COMMIT,
     )

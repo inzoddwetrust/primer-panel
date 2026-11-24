@@ -12,6 +12,8 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
       EDITION: ${EDITION:?}
       SUPERADMIN_TELEGRAM_ID: ${SUPERADMIN_TELEGRAM_ID:?}
+      DOMAIN_FRONTEND: ${DOMAIN_FRONTEND:?}
+      DOMAIN_API: ${DOMAIN_API:?}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

@@ -12,7 +12,11 @@
    audit row for every person and invite touched.
 4. An invite is used once, before its time ends; an invite making an admin
    is the superadmin's alone.
-5. Nothing is deleted: access is revoked, an invite used or revoked.
+5. Nothing is deleted: access is revoked, an invite used or revoked, a
+   person deactivated.
+6. Revoking a person's membership and deactivating a person close every
+   session of the person at once (DM-150), before the change is committed:
+   Redis not answering rolls the change back (``unavailable``).
 
 Every write of a project's access runs under the lock of the project's row
 (``app.access.rules.ProjectWrite``); accepting an invite takes the same lock
@@ -24,9 +28,12 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.access import sessions
 from app.access.actor import Actor
 from app.access.models import Invite, Membership, PanelGrant, User
 from app.access.permissions import (
@@ -101,6 +108,17 @@ async def _member(scope: Scope, user_id: uuid.UUID) -> Membership:
     if membership is None:
         raise PanelError(ErrorClass.NOT_FOUND, NOT_FOUND)
     return membership
+
+
+async def close_sessions(redis: Redis, user_id: uuid.UUID) -> None:
+    """Close every session of the person; Redis down -- ``unavailable``, and
+    the caller's transaction is rolled back with it."""
+    try:
+        await sessions.close_all(redis, user_id)
+    except RedisError as error:
+        raise PanelError(
+            ErrorClass.UNAVAILABLE, "Sessions cannot be closed now"
+        ) from error
 
 
 async def cascade(
@@ -247,9 +265,10 @@ async def set_permissions(
     return member
 
 
-async def revoke_member(scope: Scope, user_id: uuid.UUID) -> Membership:
+async def revoke_member(scope: Scope, user_id: uuid.UUID, redis: Redis) -> Membership:
     """Revoke a member's access; an admin's -- the superadmin's alone, and his
-    permissions go from the staff with him (rule 3)."""
+    permissions go from the staff with him (rule 3). The person's sessions
+    are closed (rule 6)."""
     member = await _member(scope, user_id)
     if member.is_admin and not scope.actor.is_superadmin:
         raise PanelError(ErrorClass.FORBIDDEN, "Only the superadmin revokes an admin")
@@ -259,6 +278,7 @@ async def revoke_member(scope: Scope, user_id: uuid.UUID) -> Membership:
     if member.is_admin:
         held = effective(member.permissions, is_admin=True, is_superadmin=False)
         await cascade(scope, held, user_id)
+    await close_sessions(redis, user_id)
     return member
 
 
@@ -425,3 +445,38 @@ async def revoke_panel(
             details={"user_id": str(held.user_id), "grant": held.grant},
         )
     return held
+
+
+async def deactivate_user(
+    session: AsyncSession,
+    actor: Actor,
+    user_id: uuid.UUID,
+    superadmin_telegram_id: int,
+    redis: Redis,
+) -> User:
+    """Deactivate a person (the superadmin's): their sessions close, their
+    rows stay. The superadmin's own account is changed by the passport, not
+    here (``conflict``); deactivating twice adds no second row."""
+    user = await session.scalar(
+        select(User).where(User.id == user_id).with_for_update()
+    )
+    if user is None:
+        raise PanelError(ErrorClass.NOT_FOUND, NOT_FOUND)
+    if user.telegram_id == superadmin_telegram_id:
+        raise PanelError(
+            ErrorClass.CONFLICT, "The superadmin is changed by the passport"
+        )
+    if user.deactivated_at is not None:
+        return user
+    user.deactivated_at = _now()
+    record(
+        session,
+        actor_kind=ActorKind.USER,
+        actor_id=actor.user_id,
+        project_id=None,
+        action="user.deactivate",
+        object_kind="user",
+        object_id=str(user.id),
+    )
+    await close_sessions(redis, user.id)
+    return user

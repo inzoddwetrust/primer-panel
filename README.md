@@ -24,8 +24,18 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
-  Who is signed in comes with sessions (DM-150); until then every route of
-  the API answers 401.
+- Sign-in (DM-150): comms' sign-in module vouches for who came (Telegram);
+  the Panel keeps the binding of the attempt to the browser (the cookie
+  `panel_login` against the `state` of the return), decides by the Telegram
+  id -- the superadmin, an invite, a member, else refused with the id shown
+  -- and keeps the session: `panel_session`, an opaque token whose sha256
+  lives in Redis for seven days. Revoking access, deactivating and a new
+  superadmin close every session of the person at once (an epoch per person).
+  `GET /auth/telegram/start`, `GET /auth/telegram/return`, `POST
+  /auth/logout`; every end of sign-in is a redirect to the frontend.
+  `COMMS_API_URL` and `COMMS_SERVICE_TOKEN` are optional until comms is a
+  dependency of the Panel (DM-160); `DOMAIN_FRONTEND` and `DOMAIN_API` come
+  from the passport.
 - `frontend/` -- the page. It reads `/config.json`, which its container
   renders from `API_BASE_URL`, `LANGUAGES` and `DEFAULT_LANGUAGE` at start;
   the image carries no instance value. Its colors, fonts and logo are CSS

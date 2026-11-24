@@ -24,6 +24,8 @@ env:
   LANGUAGES:         { source: passport, key: languages }          # the instance's, by commas
   DEFAULT_LANGUAGE:  { source: passport, key: default_language }
   SUPERADMIN_TELEGRAM_ID: { source: param }                      # the Panel's one superadmin
+  DOMAIN_FRONTEND:   { source: passport, key: domains.frontend }  # where sign-in sends the browser back
+  DOMAIN_API:        { source: passport, key: domains.api }       # the return address of sign-in
 
 host:
   domains: [frontend, api]

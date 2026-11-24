@@ -4,6 +4,10 @@ Each kind is a FastAPI dependency (an instance of ``Rule``) and the only way a
 route learns who acts -- every one reads ``current_actor``. A test walks the
 dependencies of every route and holds that each has exactly one rule.
 
+- ``Public`` -- anybody, signed in or not: the browser's navigations of
+  sign-in (DM-150);
+- ``SessionHolder`` -- whoever holds the request's session cookie, with no
+  check of the account behind it: signing out needs no access;
 - ``AnyActor`` -- any active person;
 - ``Superadmin`` -- the superadmin only (``forbidden`` to anybody else);
 - ``ProjectRead`` / ``ProjectWrite`` -- an action in the project of the path's
@@ -29,13 +33,14 @@ import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.access.actor import Actor, current_actor
 from app.access.models import Membership
 from app.access.permissions import Permission, effective
+from app.access.sessions import COOKIE
 from app.core.database import get_db_reader, get_db_session
 from app.core.errors import ErrorClass, PanelError
 from app.projects.models import Project
@@ -54,6 +59,18 @@ class Scope:
 
 class Rule:
     """The kind every access rule is: what the route test looks for."""
+
+
+class Public(Rule):
+    async def __call__(self) -> None:
+        return None
+
+
+class SessionHolder(Rule):
+    """The token of the request's session cookie, if any."""
+
+    async def __call__(self, request: Request) -> str | None:
+        return request.cookies.get(COOKIE) or None
 
 
 class AnyActor(Rule):

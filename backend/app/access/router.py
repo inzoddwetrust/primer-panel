@@ -10,6 +10,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,13 +43,16 @@ from app.access.schemas import (
     UserOut,
 )
 from app.audit.models import Audit
+from app.config import Settings
 from app.core.database import get_db_reader, get_db_session
+from app.core.state import get_redis, get_settings
 from app.projects.models import Project
 
 router = APIRouter(prefix="/api/v1")
 
 Reader = Annotated[AsyncSession, Depends(get_db_reader)]
 Writer = Annotated[AsyncSession, Depends(get_db_session)]
+RedisClient = Annotated[Redis, Depends(get_redis)]
 
 AsAnyone = Annotated[Actor, Depends(AnyActor())]
 AsSuperadmin = Annotated[Actor, Depends(Superadmin())]
@@ -163,8 +167,10 @@ async def set_permissions(
 
 
 @router.post("/projects/{project_id}/members/{user_id}/revoke")
-async def revoke_member(user_id: uuid.UUID, scope: PeopleWrites) -> list[MemberOut]:
-    await service.revoke_member(scope, user_id)
+async def revoke_member(
+    user_id: uuid.UUID, scope: PeopleWrites, redis: RedisClient
+) -> list[MemberOut]:
+    await service.revoke_member(scope, user_id, redis)
     return await _members(scope.session, scope.project.id)
 
 
@@ -207,6 +213,20 @@ async def list_audit(scope: MemberReads) -> list[AuditOut]:
         select(Audit).where(Audit.project_id == scope.project.id).order_by(Audit.at)
     )
     return [AuditOut.model_validate(row) for row in rows]
+
+
+@router.post("/users/{user_id}/deactivate")
+async def deactivate_user(
+    user_id: uuid.UUID,
+    actor: AsSuperadmin,
+    session: Writer,
+    redis: RedisClient,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> UserOut:
+    user = await service.deactivate_user(
+        session, actor, user_id, settings.superadmin_telegram_id, redis
+    )
+    return UserOut.model_validate(user)
 
 
 @router.get("/users")

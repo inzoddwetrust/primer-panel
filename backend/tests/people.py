@@ -1,9 +1,11 @@
 """Support of the access tests: a stand-in for the sign-in and a small world.
 
-Until DM-150 ``current_identity`` refuses everybody. The tests put
-``identity_from_header`` in its place: the Telegram id of the person comes in
-the test header ``X-As``; without it -- the real refusal (401). Nothing of
-this is in the application: the header exists only here.
+The tests of access put ``identity_from_header`` in place of
+``current_identity``: the Telegram id of the person comes in the test header
+``X-As``; without it -- 401. Nothing of this is in the application: the
+header exists only here. Changed by DM-150: ``current_identity`` reads the
+session now; the tests of sign-in and sessions (``tests/signin.py``) go
+through real sessions.
 
 ``World`` is built through the API as its people would build it: the
 superadmin makes projects and appoints admins, admins invite their staff, the
@@ -19,6 +21,7 @@ from fastapi.testclient import TestClient
 from starlette.types import ASGIApp
 
 from app.access.actor import Identity, current_identity
+from app.core.errors import ErrorClass, PanelError
 from app.main import create_app
 from tests.conftest import SUPERADMIN_ID, execute, settings_for
 from tests.failing import inner_app
@@ -30,7 +33,7 @@ async def identity_from_header(request: Request) -> Identity:
     """The person of the header ``X-As``; none -- the real refusal."""
     value = request.headers.get(AS)
     if value is None:
-        return await current_identity()
+        raise PanelError(ErrorClass.UNAUTHORIZED, "Sign in")
     return Identity(telegram_id=int(value))
 
 

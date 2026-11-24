@@ -7,15 +7,30 @@ into its environment (contract 3 rule 19).
 ``DATABASE_URL`` and ``REDIS_URL`` carry passwords: they are ``SecretStr``,
 shown as stars in every repr and error.
 
+``DOMAIN_FRONTEND`` and ``DOMAIN_API`` are the hosts of the passport's
+``domains.frontend`` and ``domains.api``: host names, no scheme, port or path.
+Sign-in returns the browser to the API's host and sends it on to the
+frontend's (DM-150).
+
+``COMMS_API_URL`` and ``COMMS_SERVICE_TOKEN`` -- the sign-in module of comms
+-- are optional until comms is a dependency of the Panel (DM-160 makes them
+required seams ``from: comms``); without them sign-in answers ``unavailable``.
+
 There is no module-level instance: ``create_app`` builds one and hands it to
 the request through ``app.core.state`` (the owner's decision of 24.11: the
 blank's form, no global singletons).
 """
 
+import re
+
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.editions import EDITIONS
+
+_HOST = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
 
 
 class Settings(BaseSettings):
@@ -33,6 +48,38 @@ class Settings(BaseSettings):
     superadmin_telegram_id: int = Field(
         validation_alias="SUPERADMIN_TELEGRAM_ID", gt=0, le=2**63 - 1
     )
+    domain_frontend: str = Field(validation_alias="DOMAIN_FRONTEND")
+    domain_api: str = Field(validation_alias="DOMAIN_API")
+    comms_api_url: str | None = Field(default=None, validation_alias="COMMS_API_URL")
+    comms_service_token: SecretStr | None = Field(
+        default=None, validation_alias="COMMS_SERVICE_TOKEN"
+    )
+
+    @field_validator("domain_frontend", "domain_api")
+    @classmethod
+    def _host_name(cls, value: str) -> str:
+        if not _HOST.fullmatch(value):
+            raise ValueError(f"{value!r} is not a host name: no scheme, port or path")
+        return value
+
+    @field_validator("comms_api_url")
+    @classmethod
+    def _comms_url(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"https?://[^\s/?#]+/?", value):
+            raise ValueError("COMMS_API_URL is the origin of comms' API, http(s)")
+        return value
+
+    @property
+    def frontend_origin(self) -> str:
+        return f"https://{self.domain_frontend}"
+
+    @property
+    def api_origin(self) -> str:
+        return f"https://{self.domain_api}"
+
+    @property
+    def comms_connected(self) -> bool:
+        return bool(self.comms_api_url) and self.comms_service_token is not None
 
     @field_validator("edition")
     @classmethod

@@ -4,6 +4,7 @@ Changed by DM-148: the variables are the Panel's -- the blank's three seams of
 its service are gone, ``REDIS_PASSWORD`` came with Redis.
 
 Changed by DM-149: ``SUPERADMIN_TELEGRAM_ID`` (a param of the passport).
+Changed by DM-150: ``DOMAIN_FRONTEND`` and ``DOMAIN_API``.
 """
 
 from pathlib import Path
@@ -18,6 +19,8 @@ STACK_ENV = {
     "LANGUAGES": "en,ru",
     "DEFAULT_LANGUAGE": "en",
     "SUPERADMIN_TELEGRAM_ID": "7000000001",
+    "DOMAIN_FRONTEND": "panel.probe.test",
+    "DOMAIN_API": "api.panel.probe.test",
 }
 
 

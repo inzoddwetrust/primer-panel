@@ -36,6 +36,7 @@ from app.main import create_app
 
 if TYPE_CHECKING:
     from tests.people import World
+    from tests.signin import SignIn
 from primer_report import Limits, PrimerReport, Seams
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -195,23 +196,40 @@ def query_scalar(url: str, statement: str) -> object:
     return asyncio.run(run())
 
 
+# The hosts of the suite's passport (DM-150).
+FRONTEND_HOST = "panel.example.test"
+API_HOST = "api.panel.example.test"
+COMMS_URL = "http://comms.test"
+
+
 def settings_for(
-    database_url: str, redis_url: str, superadmin: int = SUPERADMIN_ID
+    database_url: str,
+    redis_url: str,
+    superadmin: int = SUPERADMIN_ID,
+    *,
+    comms: bool = False,
 ) -> Settings:
     """Settings of a test app on the given database and Redis.
 
     Changed by DM-149: the superadmin's Telegram id, ``SUPERADMIN_ID`` unless
-    a test names another."""
-    return Settings.model_validate(
-        {
-            "EDITION": "core",
-            "PRIMER_RELEASE": RELEASE,
-            "PRIMER_COMMIT": COMMIT,
-            "DATABASE_URL": database_url,
-            "REDIS_URL": redis_url,
-            "SUPERADMIN_TELEGRAM_ID": superadmin,
-        }
-    )
+    a test names another.
+
+    Changed by DM-150: the hosts of the frontend and the API; with ``comms``,
+    the address and the service token of comms' sign-in module."""
+    values: dict[str, object] = {
+        "EDITION": "core",
+        "PRIMER_RELEASE": RELEASE,
+        "PRIMER_COMMIT": COMMIT,
+        "DATABASE_URL": database_url,
+        "REDIS_URL": redis_url,
+        "SUPERADMIN_TELEGRAM_ID": superadmin,
+        "DOMAIN_FRONTEND": FRONTEND_HOST,
+        "DOMAIN_API": API_HOST,
+    }
+    if comms:
+        values["COMMS_API_URL"] = COMMS_URL
+        values["COMMS_SERVICE_TOKEN"] = "test-stand-in-comms-service-token"  # noqa: S105
+    return Settings.model_validate(values)
 
 
 @pytest.fixture
@@ -297,3 +315,16 @@ def world(access_client: TestClient, migrated_db: str) -> "World":
     from tests.people import build_world
 
     return build_world(access_client, migrated_db)
+
+
+@pytest.fixture
+def signin(migrated_db: str, redis_url: str, clean_redis: Redis) -> Iterator["SignIn"]:
+    """The Panel with a stand-in of comms; browsers signing in through it.
+
+    Added by DM-150."""
+    from tests.comms_fake import FakeComms
+    from tests.signin import SignIn, client_of, signin_app
+
+    fake = FakeComms()
+    with client_of(signin_app(migrated_db, redis_url, fake)) as client:
+        yield SignIn(client, fake)
