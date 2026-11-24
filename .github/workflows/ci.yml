@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push cancels the older run of the same branch or pull request,
+# never of main: acceptance reads the CI of every commit of main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  # The machine whose loader, pridem check and conformance read the Panel:
+  # release v0.1.8 of inzoddwetrust/primer.
+  PRIDEM_COMMIT: 6f5326514549e5603b783015204aac2c6df30706
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36
+        env:
+          POSTGRES_USER: panel
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: panel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U panel -d panel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4.11-alpine3.21@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://panel:ci-only-password@127.0.0.1:5432/panel_test
+      # The suite's Redis database is 15 (tests/conftest.py refuses any other).
+      REDIS_URL: redis://127.0.0.1:6379/15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install from the lock
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes -r requirements-dev.lock
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: The machine beside it, for the types of the probes
+        # Its runtime is the lock's (pydantic, PyYAML, click, packaging):
+        # installed without its dependencies, it moves nothing of the lock.
+        run: |
+          git clone https://github.com/inzoddwetrust/primer.git "$RUNNER_TEMP/pridem"
+          git -C "$RUNNER_TEMP/pridem" checkout --detach "$PRIDEM_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/pridem" rev-parse HEAD)" = "$PRIDEM_COMMIT"
+          pip install --no-deps -e "$RUNNER_TEMP/pridem"
+          pip check
+      - name: Ruff
+        run: |
+          ruff check . ../probes ../ci
+          ruff format --check . ../probes ../ci
+      - name: Mypy
+        run: |
+          mypy .
+          mypy --config-file pyproject.toml ../probes
+      - name: Selftest of the fence of singletons
+        run: python -m tests.singletons --selftest
+      - name: Pytest
+        run: python -m pytest tests/ --junitxml=/tmp/junit.xml
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run build
+
+  image:
+    name: Image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install from the lock, and the machine beside it
+        # The probe of the machine (probes/test_probe_dm_148.py) checks the
+        # live stack with the machine's own conformance functions.
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes -r backend/requirements-dev.lock
+          git clone https://github.com/inzoddwetrust/primer.git "$RUNNER_TEMP/pridem"
+          git -C "$RUNNER_TEMP/pridem" checkout --detach "$PRIDEM_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/pridem" rev-parse HEAD)" = "$PRIDEM_COMMIT"
+          .venv/bin/pip install --no-deps -e "$RUNNER_TEMP/pridem"
+          .venv/bin/pip check
+      - name: Pinned base images resolve in the registry
+        # Every pinned name:tag@sha256 must resolve; the digest the tag points
+        # to now is printed beside it, for the record.
+        run: |
+          for ref in $(.venv/bin/python ci/check_image_pins.py --list); do
+            echo "== $ref"
+            docker buildx imagetools inspect "$ref" | grep -m1 '^Digest:'
+            echo "tag now -> $(docker buildx imagetools inspect "${ref%@*}" | grep -m1 '^Digest:')"
+          done
+      - name: Probes of the built images and of the live stack
+        run: .venv/bin/python -m pytest probes -v -p no:cacheprovider
+
+  check:
+    name: primer.yaml through pridem
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install pridem at the pinned commit (its own recipe)
+        run: |
+          git clone https://github.com/inzoddwetrust/primer.git "$RUNNER_TEMP/pridem"
+          cd "$RUNNER_TEMP/pridem"
+          git checkout --detach "$PRIDEM_COMMIT"
+          test "$(git rev-parse HEAD)" = "$PRIDEM_COMMIT"
+          python -m venv .venv
+          .venv/bin/pip install --no-index --find-links wheels/ --require-hashes -r requirements.lock
+          .venv/bin/pip install --no-deps -e .
+          .venv/bin/pip freeze --exclude-editable > "$RUNNER_TEMP/runtime.txt"
+          .venv/bin/pip install -c "$RUNNER_TEMP/runtime.txt" -e ".[dev]"
+          echo "$RUNNER_TEMP/pridem/.venv/bin" >> "$GITHUB_PATH"
+      - name: Lint the check
+        run: |
+          ruff check ci
+          ruff format --check ci
+          mypy --strict --disallow-any-explicit ci/check_primer_yaml.py ci/check_image_pins.py
+      - name: Selftest of the checks
+        run: |
+          python ci/check_primer_yaml.py primer.yaml --selftest
+          python ci/check_image_pins.py --selftest
+      - name: primer.yaml
+        run: python ci/check_primer_yaml.py primer.yaml
+      - name: Images pinned by tag and digest
+        run: python ci/check_image_pins.py
+      - name: The repository through pridem check
+        # The directory by its absolute path: pridem check names the verdict's
+        # first step by the directory's name, and "." has none.
+        run: pridem check "$GITHUB_WORKSPACE"
