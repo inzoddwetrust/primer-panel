@@ -4,7 +4,8 @@ The factory builds the application's state -- settings, the database engine
 and its sessions, the Redis client (``app.core.state.Core``) -- puts it on
 the app, and returns the app inside the request-id middleware of
 ``primer_report`` (``PrimerReport.install``), not the ``FastAPI`` object.
-The lifespan disposes of the engine and closes Redis.
+The lifespan runs the access checks of ``app.access.startup`` before the
+first request and disposes of the engine and closes Redis at the end.
 """
 
 import logging
@@ -15,6 +16,8 @@ from functools import partial
 from fastapi import FastAPI
 from starlette.types import ASGIApp
 
+from app.access.router import router as access_router
+from app.access.startup import check_at_start
 from app.config import Settings
 from app.core.database import (
     at_head,
@@ -60,14 +63,24 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             },
         )
         try:
+            await check_at_start(engine, settings, head)
             yield
         finally:
             await engine.dispose()
             await redis.aclose()
 
-    app = FastAPI(title=SERVICE, lifespan=lifespan)
+    # No /docs, /redoc or /openapi.json: the API's own description is not
+    # served on the API's domain (DM-149).
+    app = FastAPI(
+        title=SERVICE,
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     install(app, core)
     install_error_handlers(app)
+    app.include_router(access_router)
     report = PrimerReport(
         service=SERVICE,
         release=settings.release,

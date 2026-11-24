@@ -23,6 +23,7 @@ env:
   API_BASE_URL:      { source: passport, key: domains.api }
   LANGUAGES:         { source: passport, key: languages }          # the instance's, by commas
   DEFAULT_LANGUAGE:  { source: passport, key: default_language }
+  SUPERADMIN_TELEGRAM_ID: { source: param }                      # the Panel's one superadmin
 
 host:
   domains: [frontend, api]

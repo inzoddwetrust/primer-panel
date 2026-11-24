@@ -17,6 +17,15 @@ machine `pridem` installs it from `primer.yaml`.
   (`{"error": {"class", "message"}}`), the client's address and rate limits.
   `primer_report/` serves `/health` (its checks: `db`, `schema`, `redis`) and
   `/ready` and writes JSON logs (TZ section 11).
+- People and access (PRIMER-PANEL-TZ-1 sections 2, 3, 5): `app/projects/`
+  (projects of two kinds, servers), `app/access/` (people, memberships with
+  their permissions -- the closed list `Permission` -- invites, Panel grants,
+  the rules of giving and taking, the API under `/api/v1`), `app/audit/`
+  (append only). The superadmin is the person whose Telegram id the Panel's
+  passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
+  API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+  Who is signed in comes with sessions (DM-150); until then every route of
+  the API answers 401.
 - `frontend/` -- the page. It reads `/config.json`, which its container
   renders from `API_BASE_URL`, `LANGUAGES` and `DEFAULT_LANGUAGE` at start;
   the image carries no instance value. Its colors, fonts and logo are CSS

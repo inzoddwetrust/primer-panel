@@ -56,6 +56,7 @@ def _serve_and_log(
         DATABASE_URL=database_url,
         REDIS_URL=redis_url,
         EDITION="core",
+        SUPERADMIN_TELEGRAM_ID="7000000001",
         PRIMER_RELEASE=RELEASE,
         PRIMER_COMMIT=COMMIT,
     )

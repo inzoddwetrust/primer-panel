@@ -38,7 +38,7 @@ PROJECT = "panel-probe-dm148"
 ENTRY = "primer-panel"
 
 # Stand-ins for every key of env in primer.yaml; no value has the form of a
-# real secret.
+# real secret. Changed by DM-149: SUPERADMIN_TELEGRAM_ID.
 STACK_ENV = {
     "POSTGRES_PASSWORD": "probe-stand-in-postgres",
     "REDIS_PASSWORD": "probe-stand-in-redis",
@@ -46,6 +46,7 @@ STACK_ENV = {
     "API_BASE_URL": "api.probe.test",
     "LANGUAGES": "en,ru",
     "DEFAULT_LANGUAGE": "en",
+    "SUPERADMIN_TELEGRAM_ID": "7000000001",
 }
 
 READ = (

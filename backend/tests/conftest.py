@@ -16,6 +16,7 @@ import os
 import socket
 from collections.abc import Awaitable, Callable, Iterator, Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 import pytest
@@ -32,6 +33,9 @@ from starlette.types import ASGIApp
 from app.config import Settings
 from app.core.database import ALEMBIC_INI, at_head, make_engine
 from app.main import create_app
+
+if TYPE_CHECKING:
+    from tests.people import World
 from primer_report import Limits, PrimerReport, Seams
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -48,6 +52,9 @@ PROTOCOL_CHECK_TIMEOUT_S = 2.0
 
 # The Redis database of the suite; the stack's live one is 0.
 TEST_REDIS_DB = 15
+
+# The Telegram id the suite's passport names the superadmin by (DM-149).
+SUPERADMIN_ID = 7000000001
 
 
 @pytest.fixture(scope="session")
@@ -188,8 +195,13 @@ def query_scalar(url: str, statement: str) -> object:
     return asyncio.run(run())
 
 
-def settings_for(database_url: str, redis_url: str) -> Settings:
-    """Settings of a test app on the given database and Redis."""
+def settings_for(
+    database_url: str, redis_url: str, superadmin: int = SUPERADMIN_ID
+) -> Settings:
+    """Settings of a test app on the given database and Redis.
+
+    Changed by DM-149: the superadmin's Telegram id, ``SUPERADMIN_ID`` unless
+    a test names another."""
     return Settings.model_validate(
         {
             "EDITION": "core",
@@ -197,6 +209,7 @@ def settings_for(database_url: str, redis_url: str) -> Settings:
             "PRIMER_COMMIT": COMMIT,
             "DATABASE_URL": database_url,
             "REDIS_URL": redis_url,
+            "SUPERADMIN_TELEGRAM_ID": superadmin,
         }
     )
 
@@ -264,3 +277,23 @@ def report_app(
 @pytest.fixture
 def client_db_down(unreachable_url: str, redis_url: str) -> Iterator[TestClient]:
     yield from client_for(create_app(settings_for(unreachable_url, redis_url)))
+
+
+@pytest.fixture
+def access_client(migrated_db: str, redis_url: str) -> Iterator[TestClient]:
+    """The Panel at the head, with the stand-in sign-in of tests/people.py.
+
+    Added by DM-149."""
+    from tests.people import access_app
+
+    yield from client_for(access_app(migrated_db, redis_url))
+
+
+@pytest.fixture
+def world(access_client: TestClient, migrated_db: str) -> "World":
+    """Projects, admins, staff, invites and grants (tests/people.py).
+
+    Added by DM-149."""
+    from tests.people import build_world
+
+    return build_world(access_client, migrated_db)
