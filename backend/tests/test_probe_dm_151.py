@@ -1,5 +1,9 @@
 """Probes of DM-151: CORS for the Panel's frontend alone, and the refusal of a
-changing request from another origin (``app.core.origin``)."""
+changing request from another origin (``app.core.origin``).
+
+Changed by DM-151 FIX: the methods that must be guarded are written out here
+(``GUARDED_METHODS``), not taken from the code they check.
+"""
 
 import uuid
 
@@ -17,13 +21,18 @@ FOREIGN = "https://evil.example.test"
 LOOKALIKE = FRONTEND_ORIGIN + ".evil.example.test"  # the frontend's origin as a prefix
 REFUSED = {"error": {"class": "forbidden", "message": "Request from another origin"}}
 
+# The changing methods, written out: every one of them must come from the
+# frontend (gate DM-151, R3). Not UNSAFE of the code -- the expectation is
+# not the code it checks.
+GUARDED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
 
 def _unsafe_routes() -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for route in [*access_router.routes, *login_router.routes]:
         assert isinstance(route, APIRoute)
         for method in sorted(route.methods or ()):
-            if method in UNSAFE:
+            if method in GUARDED_METHODS:
                 out.append((method, route.path))
     return out
 
@@ -98,6 +107,18 @@ def test_probe_DM_151_unsafe_method_with_foreign_origin_refused(
         )
         assert "Request from another origin" not in own.text, (method, path)
         assert own.status_code in (204, 404, 422), (method, path, own.text)
+    # Every guarded method, the ones no route has yet too: the guard answers
+    # before routing, so a method without its route is refused, not 405.
+    for method in sorted(GUARDED_METHODS):
+        for path in ("/api/v1/projects", "/auth/logout"):
+            answer = world.client.request(
+                method,
+                path,
+                json={},
+                headers={**world.people["super"].headers, "Origin": FOREIGN},
+            )
+            assert answer.status_code == 403, (method, path)
+            assert answer.json() == REFUSED, (method, path)
     # The pair holds no write: the refused requests wrote nothing; the own
     # ones met objects of nothing (404) or bodies off the API (422).
     assert query_scalar(migrated_db, "SELECT count(*) FROM audit") == before
@@ -120,3 +141,7 @@ def test_an_empty_origin_is_refused(world: World, path: str) -> None:
         path, json={}, headers={**world.people["super"].headers, "Origin": ""}
     )
     assert answer.json() == REFUSED
+
+
+def test_the_code_guards_exactly_the_changing_methods() -> None:
+    assert UNSAFE == GUARDED_METHODS
