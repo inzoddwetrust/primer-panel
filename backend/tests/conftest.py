@@ -199,6 +199,9 @@ def query_scalar(url: str, statement: str) -> object:
 # The hosts of the suite's passport (DM-150).
 FRONTEND_HOST = "panel.example.test"
 API_HOST = "api.panel.example.test"
+FRONTEND_ORIGIN = f"https://{FRONTEND_HOST}"
+# What the frontend's requests carry (DM-151).
+FRONTEND = {"Origin": FRONTEND_ORIGIN}
 COMMS_URL = "http://comms.test"
 
 
@@ -238,7 +241,12 @@ def settings(test_url: str, redis_url: str) -> Settings:
 
 
 def client_for(app: ASGIApp) -> Iterator[TestClient]:
-    with TestClient(app) as client:
+    """A client of the app, its lifespan entered.
+
+    Changed by DM-151, on the dispatcher's word 24.11: requests carry the
+    frontend's Origin -- a changing request to the API comes from the
+    frontend or is refused (``app.core.origin``)."""
+    with TestClient(app, headers=FRONTEND) as client:
         yield client
 
 

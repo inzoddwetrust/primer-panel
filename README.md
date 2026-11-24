@@ -36,7 +36,18 @@ machine `pridem` installs it from `primer.yaml`.
   `COMMS_API_URL` and `COMMS_SERVICE_TOKEN` are optional until comms is a
   dependency of the Panel (DM-160); `DOMAIN_FRONTEND` and `DOMAIN_API` come
   from the passport.
-- `frontend/` -- the page. It reads `/config.json`, which its container
+- `frontend/` -- the page (DM-151): Vue with `vue-router`, `pinia` and
+  `vue-i18n`, the blank's form. `src/api/client.ts` -- the client of the
+  API, made per application and provided (no module state), sending the
+  session cookie (`credentials: 'include'`) and reading the one form of
+  errors; a 401 drops the person and shows the sign-in. Pages: `/login` --
+  the button to the API's `/auth/telegram/start` (an invite link
+  `/login?invite=<token>` hands its token on) and a refused sign-in from the
+  fragment `#reason=<code>[&telegram_id=<id>]`; `/` -- the person of
+  `/api/v1/me`. The API answers CORS with credentials to the frontend's origin
+  alone and refuses a changing request to `/api/v1/` or `/auth/logout` from
+  any other origin (`app/core/origin.py`).
+- The page in general: it reads `/config.json`, which its container
   renders from `API_BASE_URL`, `LANGUAGES` and `DEFAULT_LANGUAGE` at start;
   the image carries no instance value. Its colors, fonts and logo are CSS
   custom properties (`src/theme.css`). Its texts are built in for its two

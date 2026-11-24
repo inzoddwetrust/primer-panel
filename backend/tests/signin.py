@@ -20,7 +20,13 @@ from starlette.types import ASGIApp
 from app.access.sessions import COOKIE
 from app.main import create_app
 from tests.comms_fake import STATE, FakeComms
-from tests.conftest import API_HOST, FRONTEND_HOST, SUPERADMIN_ID, settings_for
+from tests.conftest import (
+    API_HOST,
+    FRONTEND,
+    FRONTEND_HOST,
+    SUPERADMIN_ID,
+    settings_for,
+)
 
 START = "/auth/telegram/start"
 RETURN = "/auth/telegram/return"
@@ -39,8 +45,16 @@ def signin_app(
 
 
 def client_of(app: ASGIApp) -> TestClient:
-    """The client of the browsers, on the API's host."""
-    return TestClient(app, base_url=f"https://{API_HOST}", follow_redirects=False)
+    """The client of the browsers, on the API's host.
+
+    Changed by DM-151, on the dispatcher's word 24.11: requests carry the
+    frontend's Origin."""
+    return TestClient(
+        app,
+        base_url=f"https://{API_HOST}",
+        follow_redirects=False,
+        headers=FRONTEND,
+    )
 
 
 def outcome(response: httpx.Response) -> dict[str, str]:

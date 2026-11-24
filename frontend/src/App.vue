@@ -1,26 +1,19 @@
 <script setup lang="ts">
-import type { RuntimeConfig } from './config'
-import { BUILT_IN, FALLBACK_LANGUAGE, type Texts } from './texts'
+import { useI18n } from 'vue-i18n'
 
-withDefaults(
-  defineProps<{
-    config: RuntimeConfig | null
-    error: string | null
-    texts?: Texts
-  }>(),
-  { texts: () => BUILT_IN[FALLBACK_LANGUAGE] as Texts },
-)
+defineProps<{ error: string | null }>()
+const { t } = useI18n()
 </script>
 
 <template>
-  <main>
+  <div class="app">
     <header>
-      <span class="logo" role="img" :aria-label="texts.title" data-test="logo"></span>
-      <h1 data-test="title">{{ texts.title }}</h1>
+      <span class="logo" role="img" :aria-label="t('title')" data-test="logo"></span>
+      <span data-test="title">{{ t('title') }}</span>
     </header>
-    <p v-if="error" role="alert" data-test="config-error">{{ texts.config_error }} {{ error }}</p>
-    <p v-else-if="config" data-test="api-origin">{{ texts.api_label }} {{ config.apiOrigin }}</p>
-  </main>
+    <p v-if="error" role="alert" data-test="config-error">{{ t('config_error') }} {{ error }}</p>
+    <RouterView v-else />
+  </div>
 </template>
 
 <style scoped>
@@ -33,16 +26,15 @@ header {
 }
 
 .logo {
-  width: 4rem;
-  height: 4rem;
+  width: 2rem;
+  height: 2rem;
   background-image: var(--asset-logo);
   background-repeat: no-repeat;
   background-size: contain;
 }
 
-h1 {
+header span[data-test='title'] {
   color: var(--color-brand-primary);
-  font-size: var(--font-size-heading);
   font-weight: var(--font-weight-heading);
 }
 </style>

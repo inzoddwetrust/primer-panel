@@ -5,6 +5,9 @@ Postgres and Redis. Whatever comes first, the person ends with no access:
 a session made at an old epoch is dead at birth; a session made after the
 epoch moved, by a decision taken before the revoke committed, names a person
 the database gives nothing -- the window the gate named.
+
+Changed by DM-151, on the dispatcher's word 24.11: requests carry the
+frontend's Origin.
 """
 
 import asyncio
@@ -14,7 +17,7 @@ from collections.abc import Awaitable
 import httpx
 
 from tests.comms_fake import STATE, FakeComms
-from tests.conftest import API_HOST
+from tests.conftest import API_HOST, FRONTEND
 from tests.failing import inner_app
 from tests.people import World, access_app
 from tests.signin import RETURN, START, SignIn, signin_app
@@ -48,11 +51,14 @@ def _race(
             httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=signed),
                 base_url=f"https://{API_HOST}",
+                headers=FRONTEND,
             )
             for _ in range(browsers)
         ]
         admin = httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=access), base_url="http://t"
+            transport=httpx.ASGITransport(app=access),
+            base_url="http://t",
+            headers=FRONTEND,
         )
         try:
             for client in clients:

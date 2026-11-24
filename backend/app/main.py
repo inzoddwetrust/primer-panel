@@ -15,6 +15,7 @@ from functools import partial
 
 import httpx
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp
 
 from app.access.comms import CommsClient
@@ -30,6 +31,7 @@ from app.core.database import (
     script_head,
 )
 from app.core.errors import install_error_handlers
+from app.core.origin import EXPOSED, HEADERS, METHODS, OriginGuard
 from app.core.redis import REDIS, make_redis, ping
 from app.core.state import Core, install
 from app.editions import EDITIONS
@@ -102,6 +104,17 @@ def create_app(
     )
     install(app, core)
     install_error_handlers(app)
+    # The last added is the outermost: CORS answers the preflight and puts
+    # its headers on every answer to the frontend, the guard's refusal too.
+    app.add_middleware(OriginGuard, frontend_origin=settings.frontend_origin)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.frontend_origin],
+        allow_credentials=True,
+        allow_methods=METHODS,
+        allow_headers=HEADERS,
+        expose_headers=EXPOSED,
+    )
     app.include_router(access_router)
     app.include_router(login_router)
     report = PrimerReport(

@@ -1,7 +1,8 @@
 """Writers of one project's access at the same time (gate DM-149, section 0 s.8).
 
 Two requests run concurrently against the live Postgres through one ASGI
-application. Every writer takes the project's row first (``ProjectWrite``,
+application. Changed by DM-151, on the dispatcher's word 24.11: requests carry
+the frontend's Origin. Every writer takes the project's row first (``ProjectWrite``,
 ``accept_invite``), so the outcome is one of the serial orders and never a
 deadlock (a 500).
 """
@@ -11,7 +12,7 @@ import uuid
 
 import httpx
 
-from tests.conftest import query_scalar
+from tests.conftest import FRONTEND, query_scalar
 from tests.failing import inner_app
 from tests.people import World, access_app
 
@@ -29,7 +30,7 @@ def _race(url: str, redis_url: str, calls: list[Call]) -> list[int]:
         transport = httpx.ASGITransport(app=served)
         try:
             async with httpx.AsyncClient(
-                transport=transport, base_url="http://t"
+                transport=transport, base_url="http://t", headers=FRONTEND
             ) as client:
                 answers = await asyncio.gather(
                     *(

@@ -1,42 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createMemoryHistory } from 'vue-router'
 import App from './App.vue'
 import source from './App.vue?raw'
+import loginSource from './views/LoginView.vue?raw'
+import meSource from './views/MeView.vue?raw'
+import { createPanelI18n } from './i18n'
+import { createPanelRouter } from './router'
 import { BUILT_IN } from './texts'
 
-const CONFIG = { apiOrigin: 'https://api.example.com', languages: ['en'], defaultLanguage: 'en' }
-
+// Changed by DM-151: the page is the shell of the router -- the pages are the
+// sign-in and the person; the texts are vue-i18n's over the built-in ones.
 describe('App', () => {
-  it('shows the API origin it was configured with', () => {
+  it('shows the configuration error instead of the pages', () => {
     const wrapper = mount(App, {
-      props: { config: CONFIG, error: null },
+      props: { error: '/config.json answered 404' },
+      global: { plugins: [createPanelI18n('ru')] },
     })
-    expect(wrapper.get('[data-test="api-origin"]').text()).toContain('https://api.example.com')
+    expect(wrapper.get('[data-test="config-error"]').text()).toBe(
+      `${BUILT_IN.ru?.config_error} /config.json answered 404`,
+    )
+    expect(wrapper.get('[data-test="title"]').text()).toBe(BUILT_IN.ru?.title)
+  })
+
+  it('shows the page of the route when the configuration is read', async () => {
+    const router = createPanelRouter(createMemoryHistory())
+    await router.push('/nowhere')
+    expect(router.currentRoute.value.path).toBe('/')
+    const wrapper = mount(App, {
+      props: { error: null },
+      global: { plugins: [createPanelI18n('en'), router], stubs: { MeView: true } },
+    })
     expect(wrapper.find('[data-test="config-error"]').exists()).toBe(false)
   })
 
-  it('shows the configuration error instead of an origin', () => {
-    const wrapper = mount(App, { props: { config: null, error: '/config.json answered 404' } })
-    expect(wrapper.get('[data-test="config-error"]').text()).toContain('answered 404')
-    expect(wrapper.find('[data-test="api-origin"]').exists()).toBe(false)
-  })
-
-  it('says everything in the texts it is given, the built-in ones by default', () => {
-    const texts = { title: 'Primer Panel', config_error: 'Settings:', api_label: 'Server:' }
-    const given = mount(App, {
-      props: { config: CONFIG, error: null, texts },
-    })
-    expect(given.get('[data-test="title"]').text()).toBe('Primer Panel')
-    expect(given.get('[data-test="api-origin"]').text()).toBe('Server: https://api.example.com')
-    const failed = mount(App, { props: { config: null, error: 'down', texts } })
-    expect(failed.get('[data-test="config-error"]').text()).toBe('Settings: down')
-    const builtIn = mount(App, { props: { config: null, error: 'down' } })
-    expect(builtIn.get('[data-test="title"]').text()).toBe(BUILT_IN.en?.title)
-  })
-
   it('takes colors, fonts and the logo only from custom properties', () => {
-    const style = source.slice(source.indexOf('<style'))
-    expect(style).toContain('var(--color-brand-primary)')
-    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|url\(/)
+    for (const file of [source, loginSource, meSource]) {
+      const start = file.indexOf('<style')
+      if (start < 0) {
+        continue
+      }
+      const style = file.slice(start)
+      expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|url\(/)
+    }
+    expect(source.slice(source.indexOf('<style'))).toContain('var(--color-brand-primary)')
   })
 })

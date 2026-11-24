@@ -1,5 +1,37 @@
 {
   "title": "primer-panel",
   "config_error": "Configuration is not available:",
-  "api_label": "API:"
+  "login": {
+    "heading": "Sign in to the Panel",
+    "button": "Sign in with Telegram",
+    "invite": "You came with an invite: sign in to accept it."
+  },
+  "refusal": {
+    "restart": "The sign-in did not finish. Start it again.",
+    "try_later": "Telegram or the Panel is not answering now. Try again later.",
+    "refused": "Telegram did not confirm who you are.",
+    "defect": "The sign-in failed on our side. Tell the Panel's owner.",
+    "unavailable": "Sign-in is not available yet.",
+    "foreign_state": "This sign-in was started in another browser. Start it again here.",
+    "stranger": "You have no access to the Panel. Ask for an invite.",
+    "deactivated": "Your access to the Panel is closed.",
+    "invite_invalid": "The invite is used, revoked or out of time. Ask for a new one.",
+    "unknown": "The sign-in did not succeed:",
+    "your_id": "Your Telegram id:"
+  },
+  "me": {
+    "heading": "You",
+    "telegram_id": "Telegram id:",
+    "superadmin": "Superadmin of the Panel",
+    "projects": "Projects",
+    "no_projects": "No projects yet.",
+    "admin": "admin",
+    "logout": "Sign out",
+    "loading": "Loading…"
+  },
+  "error": {
+    "network": "The Panel's API is not reachable.",
+    "timeout": "The Panel's API did not answer in time.",
+    "request_id": "Request:"
+  }
 }
