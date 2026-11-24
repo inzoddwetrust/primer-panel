@@ -153,7 +153,13 @@ async def heartbeat(box: Box) -> Response:
         "last_run_id": beat.last_run_id,
         "updated_at": datetime.now(UTC),
     }
-    snapshot = None if beat.state is None else beat.state.model_dump(mode="json")
+    # by its aliases: the form box-state.v1 is ``schema``, not the model's
+    # ``schema_`` (contract 4's BoxSnapshot does not dump by alias itself)
+    snapshot = (
+        None
+        if beat.state is None
+        else beat.state.model_dump(mode="json", by_alias=True)
+    )
     statement = insert(ServerState).values(
         server_id=box.server.id, snapshot=snapshot, **values
     )

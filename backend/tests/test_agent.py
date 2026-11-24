@@ -21,6 +21,7 @@ from pridem.protocol import (
     VerdictEnvelope,
     rendered_schema,
 )
+from pridem.report.box_snapshot import BoxSnapshot
 from pridem.report.schema import Verdict
 
 import app.agent.router as agent_router
@@ -290,6 +291,69 @@ def test_a_heartbeat_keeps_the_state_of_the_box(world: World) -> None:
     )
     answer = box.send("POST", "/heartbeat", {**beat, "unknown": 1})
     assert answer.status_code == 422  # strict: a field the contract does not know
+
+
+FULL_STATE: dict[str, object] = {
+    "schema": 1,
+    "measured_at": "2026-11-24T12:00:00Z",
+    "machine": {"version": "0.1.9"},
+    "passport": {"version": 3},
+    "lock_open_by": [],
+    "journals_without_verdict": [],
+    "stacks": [
+        {
+            "stack": "velo",
+            "release": "v1.2.0",
+            "entries": [
+                {
+                    "entry": "velo",
+                    "persistent": False,
+                    "services": [
+                        {"service": "app", "state": "running", "health": "unhealthy"}
+                    ],
+                }
+            ],
+        }
+    ],
+    "machine_stacks": [],
+    "resources": {
+        "disk": [],
+        "memory": {"unmeasured": "meminfo-unreadable"},
+        "swap": {"unmeasured": "meminfo-unreadable"},
+        "images": {"unmeasured": "docker-unreachable"},
+    },
+    "ssl": {"unmeasured": "no-certificate"},
+}
+"""A full ``box-state.v1``, as the box measures it (DM-136)."""
+
+
+def test_a_full_heartbeat_is_kept_in_the_form_it_came(world: World) -> None:
+    """Added by DM-153 FIX: the full state of a heartbeat is kept as
+    ``box-state.v1`` (``schema``, not the model's ``schema_``) and reads back
+    by contract 4's own model."""
+    box = registered(world)
+    beat = {
+        "measured_at": "2026-11-24T12:00:00Z",
+        "machine_version": "0.1.9",
+        "lock_open_by": [],
+        "journals_without_verdict": [],
+        "state": FULL_STATE,
+    }
+    assert box.send("POST", "/heartbeat", beat).status_code == 204
+    server = server_of(world, box)
+    kept = query_scalar(
+        world.url, f"SELECT snapshot FROM server_states WHERE server_id = '{server}'"
+    )
+    assert isinstance(kept, dict)
+    assert kept == FULL_STATE
+    assert BoxSnapshot.model_validate(kept).stacks != []
+    # a light heartbeat after it keeps the full form
+    light = {key: value for key, value in beat.items() if key != "state"}
+    assert box.send("POST", "/heartbeat", light).status_code == 204
+    again = query_scalar(
+        world.url, f"SELECT snapshot FROM server_states WHERE server_id = '{server}'"
+    )
+    assert again == FULL_STATE
 
 
 # --- the queue ------------------------------------------------------------------
