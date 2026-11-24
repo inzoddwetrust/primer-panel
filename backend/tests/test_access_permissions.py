@@ -79,9 +79,11 @@ def test_the_tz_table_is_kept() -> None:
             assert permission_for(action, ServerRole.TEST) is Permission.DEPLOY_TEST
     assert ACTION_PERMISSION[Action.SEED] is Permission.SEEDS
     assert ACTION_PERMISSION[Action.VERB] is Permission.PROJECT_VERBS
-    assert {a for a, p in ACTION_PERMISSION.items() if p is None} == {
-        Action.VERSION,
-        Action.STATUS,
-        Action.CHECK,
-        Action.REPORT,
+    # Changed by DM-153: ``state`` reads (DM-136, the pinned machine).
+    assert {a.value for a, p in ACTION_PERMISSION.items() if p is None} == {
+        "version",
+        "status",
+        "state",
+        "check",
+        "report",
     }

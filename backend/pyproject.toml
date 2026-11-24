@@ -22,6 +22,12 @@ dependencies = [
     "pydantic-settings>=2.10,<3.0",
     "redis>=5.3,<6.0",
     "httpx>=0.28,<0.29",
+    "cryptography>=50,<51",
+    # The deploy machine's release, for contract 4 (the protocol of the
+    # agent) and its verbs (DM-153): the wheel of its GitHub Release by its
+    # address and hash -- the one exception to the rule of 14 days, the
+    # machine's own release (the owner's word of 24.11).
+    "pridem @ https://github.com/inzoddwetrust/primer/releases/download/v0.1.9/pridem-0.1.9-py3-none-any.whl",
 ]
 
 [project.optional-dependencies]

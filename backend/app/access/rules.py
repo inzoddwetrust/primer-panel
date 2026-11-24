@@ -43,7 +43,7 @@ from app.access.permissions import Permission, effective
 from app.access.sessions import COOKIE
 from app.core.database import get_db_reader, get_db_session
 from app.core.errors import ErrorClass, PanelError
-from app.projects.models import Project
+from app.projects.models import Project, Server
 
 NOT_FOUND = "Not found"
 
@@ -167,3 +167,50 @@ class ProjectWrite(Rule):
         if scope.project.archived_at is not None:
             raise PanelError(ErrorClass.CONFLICT, "The project is archived")
         return scope
+
+
+@dataclass(frozen=True)
+class ServerScope:
+    """A project rule's scope with the server of the path (DM-153)."""
+
+    scope: Scope
+    server: Server
+
+
+async def _server_scope(
+    session: AsyncSession, actor: Actor, server_id: uuid.UUID, *, lock: bool
+) -> ServerScope:
+    server = await session.get(Server, server_id)
+    if server is None or server.detached_at is not None:
+        raise PanelError(ErrorClass.NOT_FOUND, NOT_FOUND)
+    scope = await _scope(session, actor, server.project_id, lock=lock)
+    return ServerScope(scope, server)
+
+
+class ServerRead(Rule):
+    """Reading about a server: any member of its project (DM-153)."""
+
+    async def __call__(
+        self,
+        server_id: uuid.UUID,
+        actor: Annotated[Actor, Depends(current_actor)],
+        session: Annotated[AsyncSession, Depends(get_db_reader)],
+    ) -> ServerScope:
+        return await _server_scope(session, actor, server_id, lock=False)
+
+
+class ServerWrite(Rule):
+    """A change about a server: a member of its project, the project's row
+    locked; the permission is the action's, named by the route (a command's
+    depends on its verb, its arguments and the server's role)."""
+
+    async def __call__(
+        self,
+        server_id: uuid.UUID,
+        actor: Annotated[Actor, Depends(current_actor)],
+        session: Annotated[AsyncSession, Depends(get_db_session)],
+    ) -> ServerScope:
+        found = await _server_scope(session, actor, server_id, lock=True)
+        if found.scope.project.archived_at is not None:
+            raise PanelError(ErrorClass.CONFLICT, "The project is archived")
+        return found

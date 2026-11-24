@@ -22,6 +22,9 @@ from app.access.comms import CommsClient
 from app.access.login import router as login_router
 from app.access.router import router as access_router
 from app.access.startup import check_at_start
+from app.agent.box import install_agent_refusals
+from app.agent.people import router as servers_router
+from app.agent.router import router as agent_router
 from app.config import Settings
 from app.core.database import (
     at_head,
@@ -117,6 +120,9 @@ def create_app(
     )
     app.include_router(access_router)
     app.include_router(login_router)
+    app.include_router(servers_router)
+    app.include_router(agent_router)
+    install_agent_refusals(app)
     report = PrimerReport(
         service=SERVICE,
         release=settings.release,

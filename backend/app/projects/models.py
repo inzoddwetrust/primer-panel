@@ -7,10 +7,12 @@ one product with all its instances -- or ``service`` -- a shared external
 service on its own servers; people of product projects have no access to a
 service project.
 
-A server is an instance. Here it is the minimal row an access record can
-point at (``memberships.server_id``); registration, the box's key and its
-state come with DM-152. Nothing is deleted: a project is archived, a server
-detached.
+A server is an instance: a box registered by a one-time token of its
+project (DM-153, ``app.agent``). It holds the box's identity -- ``box_id``,
+which the Panel minted at the registration, and the public half of its key
+(ed25519): the box signs every request with the other half, which never
+leaves the box. The box's state is ``server_states``. Nothing is deleted: a
+project is archived, a server detached.
 """
 
 import uuid
@@ -63,6 +65,8 @@ class Server(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"))
     name: Mapped[str] = mapped_column(String(63), unique=True)
     role: Mapped[str] = mapped_column(String(16))
+    box_id: Mapped[str] = mapped_column(String(64), unique=True)
+    box_key_public: Mapped[str] = mapped_column(String(64))
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

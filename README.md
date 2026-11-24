@@ -24,6 +24,15 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- The agent's side (DM-153): `app/agent/` -- `/agent/v1/` by contract 4 of
+  the deploy machine (`pridem.protocol`, the wheel of its release in
+  `requirements.lock`): a box registers by a one-time token of its project
+  and signs every request with its ed25519 key, of which the Panel keeps the
+  public half; heartbeat, the queue of commands (a long-poll; giving is
+  taking; one taken command per server), the events of a run by `(run_id,
+  seq)`, its verdict in a signed envelope, history. People put commands in a
+  server's queue under `/api/v1/servers/{id}/commands`, each checked against
+  the machine's verbs and the person's permission.
 - Sign-in (DM-150): comms' sign-in module vouches for who came (Telegram);
   the Panel keeps the binding of the attempt to the browser (the cookie
   `panel_login` against the `state` of the return), decides by the Telegram

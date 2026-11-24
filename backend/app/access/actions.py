@@ -4,8 +4,8 @@ One permission per action, in one table. An action is a verb of the deploy
 machine -- the Panel runs them on servers through its queue -- or an action
 of the Panel itself. ``READ`` actions are open to every member of the
 project. The verbs are the machine's registry ``pridem.verbs.VERBS`` of the
-release the Panel drives (v0.1.8); a test holds the two equal, so a verb a
-new machine adds turns it red until the table names its permission.
+release the Panel drives (pinned in CI); a test holds the two equal, so a
+verb a new machine adds turns it red until the table names its permission.
 
 The deploy verbs need ``deploy_test`` on a server of role ``test`` or
 ``preview`` and ``deploy_prod`` on ``prod`` (``ByRole``). The confirmation of
@@ -21,9 +21,11 @@ from app.projects.models import ServerRole
 
 
 class Action(StrEnum):
-    # Verbs of the deploy machine v0.1.8 (pridem.verbs.VERBS).
+    # Verbs of the deploy machine at the pinned commit (pridem.verbs.VERBS);
+    # ``state`` came with DM-136 (changed by DM-153).
     VERSION = "version"
     STATUS = "status"
+    STATE = "state"
     CHECK = "check"
     REPORT = "report"
     INSTALL = "install"
@@ -77,6 +79,7 @@ DEPLOY = ByRole(test=Permission.DEPLOY_TEST, prod=Permission.DEPLOY_PROD)
 ACTION_PERMISSION: Mapping[Action, Permission | ByRole | None] = {
     Action.VERSION: READ,
     Action.STATUS: READ,
+    Action.STATE: READ,
     Action.CHECK: READ,
     Action.REPORT: READ,
     Action.INSTALL: DEPLOY,

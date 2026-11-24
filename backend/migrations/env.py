@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 # holds a table only once its module is imported. A new model module is added
 # here (the schema test compares the migrations with this metadata).
 import app.access.models
+import app.agent.models
 import app.audit.models
 import app.projects.models  # noqa: F401
 from app.core.database import Base, database_url, make_engine

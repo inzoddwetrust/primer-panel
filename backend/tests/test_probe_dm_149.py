@@ -15,6 +15,8 @@ from app.access.login import router as login_router
 from app.access.permissions import ALL, Permission
 from app.access.router import router
 from app.access.rules import AnyActor, Rule
+from app.agent.people import router as servers_router
+from app.agent.router import router as agent_router
 from tests.conftest import SUPERADMIN_ID, client_for, query_scalar
 from tests.people import World, access_app
 
@@ -203,6 +205,8 @@ def _rules_of(routes: Iterable[object]) -> dict[str, int]:
 
 
 def test_probe_DM_149_every_action_has_a_permission() -> None:
+    """Changed by DM-153: the rules are walked on the routers of servers and of
+    the agent too; the verbs are the pinned machine's (``state`` added)."""
     # The machine's verbs are actions, each with its permission or READ.
     assert {action.value for action in MACHINE_VERBS} == set(VERBS)
     assert set(ACTION_PERMISSION) == set(Action)
@@ -217,9 +221,15 @@ def test_probe_DM_149_every_action_has_a_permission() -> None:
     # Every route of the API has exactly one access rule, and the person comes
     # to it only through current_actor. Changed by DM-150: every router of the
     # application -- the routes of sign-in too.
-    every = [*router.routes, *login_router.routes]
+    # Changed by DM-153: the routers of servers and of the agent too.
+    every = [
+        *router.routes,
+        *login_router.routes,
+        *servers_router.routes,
+        *agent_router.routes,
+    ]
     counted = _rules_of(every)
-    assert len(counted) == len(_routes()) + 3 > 3
+    assert len(counted) == len(_routes()) + 3 + 3 + 7
     assert set(counted.values()) == {1}, counted
     for route in every:
         assert isinstance(route, APIRoute)

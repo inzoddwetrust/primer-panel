@@ -9,6 +9,7 @@ from alembic.migration import MigrationContext
 from sqlalchemy.exc import DBAPIError
 
 import app.access.models
+import app.agent.models
 import app.audit.models
 import app.projects.models  # noqa: F401 -- their tables on Base.metadata
 from app.core.database import Base, make_engine, script_head
@@ -39,7 +40,7 @@ def _differences(url: str) -> list[object]:
 
 
 def test_the_migrated_schema_is_the_models(migrated_db: str) -> None:
-    assert script_head() == "0002"
+    assert script_head() == "0003"  # changed by DM-153: the agent's tables
     assert _differences(migrated_db) == []
 
 
@@ -56,7 +57,7 @@ def test_the_migrations_go_down_and_up_again(migrated_db: str) -> None:
     assert query_scalar(migrated_db, "SELECT to_regproc('audit_append_only')") is None
     command.upgrade(alembic_config(), "head")
     assert (
-        query_scalar(migrated_db, "SELECT version_num FROM alembic_version") == "0002"
+        query_scalar(migrated_db, "SELECT version_num FROM alembic_version") == "0003"
     )
     assert _differences(migrated_db) == []
 

@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient
 
 from app.access.login import router as login_router
 from app.access.router import router as access_router
+from app.agent.people import router as servers_router
+from app.agent.router import router as agent_router
 from app.core.origin import UNSAFE, guarded
 from tests.conftest import FRONTEND_ORIGIN, query_scalar
 from tests.people import World
@@ -29,7 +31,8 @@ GUARDED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 def _unsafe_routes() -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
-    for route in [*access_router.routes, *login_router.routes]:
+    # Changed by DM-153: the people's routes about servers too.
+    for route in [*access_router.routes, *login_router.routes, *servers_router.routes]:
         assert isinstance(route, APIRoute)
         for method in sorted(route.methods or ()):
             if method in GUARDED_METHODS:
@@ -39,7 +42,7 @@ def _unsafe_routes() -> list[tuple[str, str]]:
 
 def _concrete(path: str) -> str:
     """The path with an id of nothing in place of every parameter."""
-    for name in ("project_id", "user_id", "invite_id", "grant_id"):
+    for name in ("project_id", "user_id", "invite_id", "grant_id", "server_id"):
         path = path.replace("{" + name + "}", str(uuid.uuid4()))
     return path
 
@@ -76,7 +79,9 @@ def test_probe_DM_151_unsafe_method_with_foreign_origin_refused(
 ) -> None:
     """Every changing route of the API and the sign-out: another origin, a
     lookalike or none at all -- 403 before the route runs, nothing written.
-    The pair: the frontend's origin reaches the route."""
+    The pair: the frontend's origin reaches the route.
+
+    Changed by DM-153: the people's routes about servers are walked too."""
     routes = _unsafe_routes()
     assert routes
     assert all(guarded(path) for _, path in routes)
@@ -145,3 +150,10 @@ def test_an_empty_origin_is_refused(world: World, path: str) -> None:
 
 def test_the_code_guards_exactly_the_changing_methods() -> None:
     assert UNSAFE == GUARDED_METHODS
+
+
+def test_the_agent_is_not_guarded_by_origin() -> None:
+    """Added by DM-153: a box is no browser; its signature guards its paths."""
+    paths = [route.path for route in agent_router.routes if isinstance(route, APIRoute)]
+    assert len(paths) == 7
+    assert not any(guarded(path) for path in paths)
