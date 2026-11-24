@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import MainMenu from './components/MainMenu.vue'
 
 defineProps<{ error: string | null }>()
 const { t } = useI18n()
@@ -12,7 +13,10 @@ const { t } = useI18n()
       <span data-test="title">{{ t('title') }}</span>
     </header>
     <p v-if="error" role="alert" data-test="config-error">{{ t('config_error') }} {{ error }}</p>
-    <RouterView v-else />
+    <template v-else>
+      <MainMenu />
+      <RouterView />
+    </template>
   </div>
 </template>
 

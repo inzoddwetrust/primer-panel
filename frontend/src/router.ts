@@ -1,5 +1,5 @@
 // The pages of the Panel: the sign-in and the person (DM-151); the projects,
-// a project and the superadmin's admins (DM-152). The screens of the fleet,
+// a project and the superadmin's admins (DM-152); the fleet (DM-154). The screens of the fleet,
 // the server, the run and the passport come with their cards.
 //
 // The guard (src/main.ts, `guard`) loads the person for every page but the
@@ -10,6 +10,7 @@
 
 import { createRouter, type RouterHistory } from 'vue-router'
 import AdminsView from './views/AdminsView.vue'
+import FleetView from './views/FleetView.vue'
 import LoginView from './views/LoginView.vue'
 import MeView from './views/MeView.vue'
 import ProjectView from './views/ProjectView.vue'
@@ -20,7 +21,9 @@ export function createPanelRouter(history: RouterHistory) {
     history,
     routes: [
       { path: '/login', name: 'login', component: LoginView },
-      { path: '/', name: 'me', component: MeView },
+      // The fleet is the main page (DM-154); the person is in the menu.
+      { path: '/', name: 'fleet', component: FleetView },
+      { path: '/me', name: 'me', component: MeView },
       // The screens of access (DM-152)
       { path: '/projects', name: 'projects', component: ProjectsView },
       { path: '/projects/:projectId', name: 'project', component: ProjectView, props: true },

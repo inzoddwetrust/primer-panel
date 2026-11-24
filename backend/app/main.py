@@ -38,6 +38,7 @@ from app.core.origin import EXPOSED, HEADERS, METHODS, OriginGuard
 from app.core.redis import REDIS, make_redis, ping
 from app.core.state import Core, install
 from app.editions import EDITIONS
+from app.fleet.router import router as fleet_router
 from primer_report import Limits, PrimerReport, Seams
 
 SERVICE = "primer-panel"
@@ -122,6 +123,7 @@ def create_app(
     app.include_router(login_router)
     app.include_router(servers_router)
     app.include_router(agent_router)
+    app.include_router(fleet_router)
     install_agent_refusals(app)
     report = PrimerReport(
         service=SERVICE,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory } from 'vue-router'
+import { createPinia } from 'pinia'
 import App from './App.vue'
 import source from './App.vue?raw'
 import loginSource from './views/LoginView.vue?raw'
@@ -11,6 +12,7 @@ import { BUILT_IN } from './texts'
 
 // Changed by DM-151: the page is the shell of the router -- the pages are the
 // sign-in and the person; the texts are vue-i18n's over the built-in ones.
+// Changed by DM-154: the menu reads the person (pinia); `/` is the fleet.
 describe('App', () => {
   it('shows the configuration error instead of the pages', () => {
     const wrapper = mount(App, {
@@ -29,7 +31,10 @@ describe('App', () => {
     expect(router.currentRoute.value.path).toBe('/')
     const wrapper = mount(App, {
       props: { error: null },
-      global: { plugins: [createPanelI18n('en'), router], stubs: { MeView: true } },
+      global: {
+        plugins: [createPanelI18n('en'), router, createPinia()],
+        stubs: { FleetView: true, MeView: true },
+      },
     })
     expect(wrapper.find('[data-test="config-error"]').exists()).toBe(false)
   })

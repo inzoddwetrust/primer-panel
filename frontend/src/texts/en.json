@@ -98,5 +98,36 @@
     "project": "Project",
     "person": "Admin",
     "all_on": "On for all"
+  },
+  "menu": {
+    "fleet": "Fleet",
+    "projects": "Projects",
+    "admins": "Admins × permissions",
+    "me": "You"
+  },
+  "fleet": {
+    "heading": "Fleet",
+    "none": "No servers yet.",
+    "no_data": "no data",
+    "server": "Server",
+    "project": "Project",
+    "role": "Role",
+    "stands": "What stands",
+    "verdict": "Last verdict",
+    "unverified": "signature does not hold",
+    "health": "Health",
+    "heartbeat": "Heartbeat",
+    "machine": "Machine",
+    "ssl": "Certificate",
+    "red": "Red",
+    "nothing_stands": "nothing stands",
+    "reason": {
+      "no-heartbeat": "not heard for 90 s",
+      "verdict-unverified": "verdict not verified",
+      "verdict-red": "red verdict",
+      "service-unhealthy": "a service unhealthy",
+      "machine-behind": "machine behind the release",
+      "ssl-due": "certificate due"
+    }
   }
 }

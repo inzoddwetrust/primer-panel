@@ -24,6 +24,13 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- The fleet (DM-154): `/`, the servers of the projects a person sees, red
+  first, read again every 30 s; `GET /api/v1/servers` gives each with the
+  facts its box sent (`null` -- no data) and the reasons it is red
+  (`app/fleet/reasons.py`: no heartbeat for 90 s, a verdict not verified, a
+  red verdict, a service unhealthy, the machine behind the Panel's pinned
+  release, the certificate due by the machine's own moment), in the fleet's
+  order. The person's page moved to `/me`.
 - The screens of access (DM-152): `/projects` (the projects a person sees;
   the superadmin makes them), `/projects/:projectId` (people and their
   permissions, the admin the superadmin appoints, invites -- a link shown
