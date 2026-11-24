@@ -24,6 +24,14 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- The screens of access (DM-152): `/projects` (the projects a person sees;
+  the superadmin makes them), `/projects/:projectId` (people and their
+  permissions, the admin the superadmin appoints, invites -- a link shown
+  once) and `/superadmin/admins` (every admin × every permission). The
+  columns are the API's list, `GET /api/v1/permissions`; a member's row shows
+  `effective` (an admin's `people` is the API's) and a change sets
+  `permissions`, keeping what the giver cannot see. The page shows only what
+  a person may do; the API checks every action again.
 - The agent's side (DM-153): `app/agent/` -- `/agent/v1/` by contract 4 of
   the deploy machine (`pridem.protocol`, the wheel of its release in
   `requirements.lock`): a box registers by a one-time token of its project

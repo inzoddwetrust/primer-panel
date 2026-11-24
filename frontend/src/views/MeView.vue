@@ -47,6 +47,9 @@ async function logout(): Promise<void> {
         </li>
       </ul>
       <p v-else data-test="no-projects">{{ t('me.no_projects') }}</p>
+      <RouterLink :to="{ name: 'projects' }" data-test="projects-link">
+        {{ t('me.projects_link') }}
+      </RouterLink>
       <button type="button" data-test="logout" @click="logout">{{ t('me.logout') }}</button>
     </section>
     <p v-else>{{ t('me.loading') }}</p>

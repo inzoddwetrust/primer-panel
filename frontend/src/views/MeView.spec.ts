@@ -50,6 +50,8 @@ describe('the page of the person', () => {
     expect(wrapper.get('[data-test="projects"]').text()).toContain('Velo')
     expect(wrapper.get('[data-test="projects"]').text()).toContain('deploy_test, people')
     expect(wrapper.find('[data-test="superadmin"]').exists()).toBe(false)
+    // Changed by DM-152: the way to the screens of access
+    expect(wrapper.find('[data-test="projects-link"]').exists()).toBe(true)
   })
 
   it('shows an error of the API by its class, message and request', async () => {

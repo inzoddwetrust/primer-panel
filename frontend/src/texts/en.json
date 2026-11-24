@@ -27,11 +27,76 @@
     "no_projects": "No projects yet.",
     "admin": "admin",
     "logout": "Sign out",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "projects_link": "To the projects"
   },
   "error": {
     "network": "The Panel's API is not reachable.",
     "timeout": "The Panel's API did not answer in time.",
     "request_id": "Request:"
+  },
+  "nav": {
+    "projects": "Projects",
+    "admins": "Admins × permissions",
+    "me": "You"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "not_found": "Not found.",
+    "loading": "Loading…",
+    "close": "Close"
+  },
+  "projects": {
+    "heading": "Projects",
+    "none": "No projects yet.",
+    "new": "New project",
+    "slug": "Slug",
+    "name": "Name",
+    "kind": "Kind",
+    "repo": "Repository",
+    "create": "Create",
+    "kind_product": "product",
+    "kind_service": "service",
+    "archived": "archived"
+  },
+  "project": {
+    "members": "People",
+    "nobody": "Nobody yet.",
+    "no_admin": "The project has no admin.",
+    "admin": "admin",
+    "edit": "Permissions",
+    "revoke": "Revoke",
+    "appoint": "Appoint an admin",
+    "person": "Person",
+    "archive": "Archive the project",
+    "archive_confirm": "Archiving cannot be undone. Type the project's slug to go on:",
+    "revoke_admin_confirm": "Revoking an admin takes his permissions from all the staff. Type his Telegram id to go on:",
+    "revoke_staff_confirm": "Revoke this person's access?",
+    "take_confirm": "Taking these permissions from an admin takes them from staff members of the project: {count}. Go on?"
+  },
+  "invites": {
+    "heading": "Invites",
+    "none": "No invites.",
+    "create": "Create an invite",
+    "is_admin": "an admin",
+    "ttl": "Valid, hours",
+    "link": "The link — it is shown once:",
+    "copy": "Copy",
+    "revoke": "Revoke",
+    "revoke_confirm": "Revoke this invite?",
+    "state_active": "active",
+    "state_used": "used",
+    "state_revoked": "revoked",
+    "state_expired": "expired"
+  },
+  "admins": {
+    "heading": "Admins × permissions",
+    "none": "No admins yet.",
+    "project": "Project",
+    "person": "Admin",
+    "all_on": "On for all"
   }
 }

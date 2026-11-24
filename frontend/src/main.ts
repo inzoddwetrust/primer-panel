@@ -7,7 +7,7 @@ import { API_CLIENT, createApiClient } from './api/client'
 import { loadConfig } from './config'
 import { RUNTIME_CONFIG } from './config-key'
 import { createPanelI18n } from './i18n'
-import { createPanelRouter } from './router'
+import { createPanelRouter, guard } from './router'
 import { useMeStore } from './stores/me'
 import { BUILT_IN, FALLBACK_LANGUAGE, chooseLanguage } from './texts'
 
@@ -37,12 +37,12 @@ export async function start(): Promise<void> {
         void router.replace({ name: 'login' })
       },
     })
-    router.beforeEach(async (to) => {
-      if (to.name === 'me' && (await me.load(api)) === 'unauthorized') {
-        return { name: 'login' }
-      }
-      return true
-    })
+    router.beforeEach(
+      guard(
+        () => me.load(api),
+        () => me.me?.is_superadmin === true,
+      ),
+    )
     app.provide(API_CLIENT, api).provide(RUNTIME_CONFIG, config).use(router)
     app.mount('#app')
   } catch (error: unknown) {

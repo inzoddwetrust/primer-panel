@@ -87,11 +87,23 @@ class UserOut(Answer):
 
 
 class MemberOut(Answer):
+    """A member: ``permissions`` -- what is stored (what a change sets);
+    ``effective`` -- what the member may do, ``people`` always for an admin
+    (``app.access.permissions.effective``; changed by DM-152)."""
+
     user: UserOut
     is_admin: bool
     permissions: list[str]
+    effective: list[str]
     granted_by: uuid.UUID
     granted_at: datetime
+
+
+class PermissionsOut(Answer):
+    """The closed list of permissions, in the code's order (DM-152): the
+    columns of the screens of access, a new permission included."""
+
+    permissions: list[str]
 
 
 class InviteOut(Answer):

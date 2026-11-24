@@ -37,6 +37,7 @@ from app.access.schemas import (
     PanelGrantIn,
     PanelGrantOut,
     PermissionsIn,
+    PermissionsOut,
     ProjectAccessOut,
     ProjectIn,
     ProjectOut,
@@ -74,6 +75,13 @@ async def _members(session: AsyncSession, project_id: uuid.UUID) -> list[MemberO
             user=UserOut.model_validate(user),
             is_admin=membership.is_admin,
             permissions=membership.permissions,
+            effective=canonical(
+                effective(
+                    membership.permissions,
+                    is_admin=membership.is_admin,
+                    is_superadmin=False,
+                )
+            ),
             granted_by=membership.granted_by,
             granted_at=membership.granted_at,
         )
@@ -115,6 +123,12 @@ async def me(actor: AsAnyone, session: Reader) -> MeOut:
         projects=projects,
         panel_grants=sorted(grants),
     )
+
+
+@router.get("/permissions")
+async def list_permissions(actor: AsAnyone) -> PermissionsOut:
+    """Every permission of the code, in its order (DM-152)."""
+    return PermissionsOut(permissions=[permission.value for permission in Permission])
 
 
 @router.get("/projects")

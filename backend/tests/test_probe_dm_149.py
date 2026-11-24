@@ -89,6 +89,8 @@ def _no_object_cases(w: World) -> dict[tuple[str, str], tuple[str, str, object, 
     grant = {"user_id": staff_b, "grant": "support"}
     return {
         ("GET", "/me"): ("GET", "/me", None, 200),
+        # Added by DM-152: the closed list of permissions, no object.
+        ("GET", "/permissions"): ("GET", "/permissions", None, 200),
         ("GET", "/projects"): ("GET", "/projects", None, 200),
         ("POST", "/projects"): ("POST", "/projects", project, 403),
         ("GET", "/users"): ("GET", "/users", None, 403),
@@ -138,7 +140,10 @@ def test_probe_DM_149_foreign_object_is_not_found_on_every_route(world: World) -
     project S) exactly as an object that does not exist: one answer. Who holds
     the action's permission in A -- ``admin_a``, ``people_a`` -- gets
     ``not_found``; who does not -- ``staff_a`` -- the same refusal as for
-    nothing at all. Routes with no object of a project show nothing of B."""
+    nothing at all. Routes with no object of a project show nothing of B.
+
+    Changed by DM-152: the list of permissions is a route with no object.
+    """
     cases = _foreign_cases(world)
     no_object = _no_object_cases(world)
     assert set(cases) | set(no_object) == _routes()

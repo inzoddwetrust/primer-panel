@@ -52,6 +52,7 @@ export interface ApiClient {
   request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T>
   get<T>(path: string): Promise<T>
   post<T>(path: string, body?: unknown): Promise<T>
+  put<T>(path: string, body?: unknown): Promise<T>
 }
 
 export interface ClientOptions {
@@ -132,6 +133,7 @@ export function createApiClient(options: ClientOptions): ApiClient {
     request,
     get: <T>(path: string) => request<T>('GET', path),
     post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+    put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   }
 }
 
