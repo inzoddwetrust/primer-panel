@@ -24,6 +24,13 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- A server's card (DM-155): `/servers/:serverId` -- its head (the fleet's
+  row), what stands on it as the box measured it, its runs, and the verbs of
+  the machine's registry as buttons (`GET /api/v1/servers/{id}/verbs`): each
+  a form by the verb's own JSON Schema, only with the permission for the
+  server's role; a destructive action is confirmed by the server's name typed
+  exactly, any action but reading on `prod` by "are you sure?" -- both
+  checked by the API (`app/agent/verbs.py`).
 - The fleet (DM-154): `/`, the servers of the projects a person sees, red
   first, read again every 30 s; `GET /api/v1/servers` gives each with the
   facts its box sent (`null` -- no data) and the reasons it is red

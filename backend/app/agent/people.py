@@ -8,9 +8,12 @@ command in a server's queue, the server's commands.
   the verb is in the registry; its arguments pass the verb's own model; the
   person holds the action's permission (``app.access.actions``: by the verb
   and the server's role -- ``ssl`` with ``action: status`` is reading); a
-  destructive command -- ``destroy``, ``reinstall`` or any with ``confirm`` --
-  comes confirmed (the page asks the server's name, R-18) and its ``confirm``
-  is that name. Then it is ``queued``, with an audit row.
+  destructive command (``app.agent.verbs``) comes confirmed and its
+  ``confirm`` is the server's name, typed exactly (R-18); on ``prod`` every
+  action but reading comes confirmed. Then it is ``queued``, with an audit
+  row. Changed by DM-155: the rules of verbs moved to ``app.agent.verbs``.
+- **What a server's card reads** (DM-155): its runs, the last first, and the
+  buttons the person has on it (``app.agent.verbs.buttons``).
 - **A server of a project the person does not see is "not found"**, as every
   object of the Panel (DM-149).
 """
@@ -26,21 +29,19 @@ from pridem.verbs import VERBS
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
-from app.access.actions import Action, permission_for
 from app.access.permissions import Permission
 from app.access.rules import ProjectWrite, Scope, ServerRead, ServerScope, ServerWrite
-from app.agent.models import Command, CommandState, RegistrationToken
+from app.agent.models import Command, CommandState, RegistrationToken, Run, Verdict
 from app.agent.queue import expire_taken
+from app.agent.verbs import CONFIRM, buttons, destructive, needed_permission, needs_sure
 from app.audit.models import ActorKind
 from app.audit.service import record
 from app.core.errors import ErrorClass, PanelError
 from app.core.state import Core, get_core
-from app.projects.models import ServerRole
 
 router = APIRouter(prefix="/api/v1")
 
 TOKEN_TTL = timedelta(hours=1)
-DESTRUCTIVE_VERBS = frozenset({"destroy", "reinstall"})
 
 ServersWrites = Annotated[Scope, Depends(ProjectWrite(Permission.SERVERS))]
 OnServer = Annotated[ServerScope, Depends(ServerWrite())]
@@ -100,16 +101,6 @@ async def create_registration_token(scope: ServersWrites) -> TokenCreated:
     return TokenCreated(id=row.id, token=token, expires_at=row.expires_at)
 
 
-def needed_permission(
-    verb: str, args: dict[str, object], role: str
-) -> Permission | None:
-    """The permission a command needs on a server of ``role``; ``None`` -- any
-    member. ``ssl status`` reads (PRIMER-PANEL-TZ-1 1.1)."""
-    if verb == "ssl" and args.get("action") == "status":
-        return None
-    return permission_for(Action(verb), ServerRole(role))
-
-
 @router.post("/servers/{server_id}/commands", status_code=201)
 async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
     scope, server = found.scope, found.server
@@ -123,21 +114,29 @@ async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
     needed = needed_permission(body.verb, body.args, server.role)
     if needed is not None and needed not in scope.permissions:
         raise PanelError(ErrorClass.FORBIDDEN, f"The permission {needed} is needed")
-    confirm = body.args.get("confirm")
-    destructive = body.verb in DESTRUCTIVE_VERBS or confirm is not None
-    if destructive and not body.confirmed:
-        raise PanelError(
-            ErrorClass.CONFLICT, "A destructive command is confirmed first"
-        )
-    if confirm is not None and confirm != server.name:
-        raise PanelError(ErrorClass.INVALID, "confirm is the server's name")
+    # Changed by DM-155: the destructive actions are the table of
+    # app.agent.verbs (db restore and the resets of seed too), confirmed by
+    # the server's name typed exactly; on prod every action but reading is
+    # confirmed ("are you sure?", R-18).
+    is_destructive = destructive(body.verb, body.args)
+    if is_destructive:
+        if not body.confirmed:
+            raise PanelError(
+                ErrorClass.CONFLICT, "A destructive command is confirmed first"
+            )
+        if body.args.get(CONFIRM) != server.name:
+            raise PanelError(ErrorClass.INVALID, "confirm is the server's name")
+    elif body.args.get(CONFIRM) is not None:
+        raise PanelError(ErrorClass.INVALID, "confirm goes with a destructive command")
+    if needs_sure(body.verb, body.args, server.role) and not body.confirmed:
+        raise PanelError(ErrorClass.CONFLICT, "A command on prod is confirmed first")
     await expire_taken(scope.session, server.id)
     command = Command(
         server_id=server.id,
         verb=body.verb,
         args=body.args,
         requested_by=scope.actor.user_id,
-        confirmed_at=datetime.now(UTC) if destructive else None,
+        confirmed_at=datetime.now(UTC) if is_destructive else None,
         state=CommandState.QUEUED.value,
     )
     scope.session.add(command)
@@ -154,7 +153,7 @@ async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
         details={
             "server_id": str(server.id),
             "verb": body.verb,
-            "confirmed": destructive,
+            "confirmed": body.confirmed,
         },
     )
     return CommandOut.model_validate(command)
@@ -172,3 +171,72 @@ async def list_commands(
         .order_by(Command.requested_at)
     )
     return [CommandOut.model_validate(row) for row in rows]
+
+
+RUNS_SHOWN = 50
+
+
+class RunOut(BaseModel):
+    run_id: str
+    verb: str | None
+    actor: dict[str, object] | None
+    started_at: str | None
+    ended_at: str | None
+    outcome: str | None
+    verdict: dict[str, object] | None
+    running: bool
+
+
+@router.get("/servers/{server_id}/runs")
+async def list_runs(found: AboutServer) -> list[RunOut]:
+    """The server's last runs, the last first; a run with no end and no
+    verdict is running."""
+    rows = await found.scope.session.execute(
+        select(Run, Verdict.body["result"].astext, Verdict.verified)
+        .outerjoin(Verdict, Verdict.run_id == Run.run_id)
+        .where(Run.server_id == found.server.id)
+        .order_by(Run.started_at.desc().nulls_last(), Run.run_id.desc())
+        .limit(RUNS_SHOWN)
+    )
+    return [
+        RunOut(
+            run_id=run.run_id,
+            verb=run.verb,
+            actor=run.actor,
+            started_at=run.started_at,
+            ended_at=run.ended_at,
+            outcome=run.outcome,
+            verdict=None
+            if result is None
+            else {"result": result, "verified": verified},
+            running=run.ended_at is None and result is None,
+        )
+        for run, result, verified in rows.all()
+    ]
+
+
+class ButtonOut(BaseModel):
+    verb: str
+    preset: dict[str, object]
+    schema_: dict[str, object] = Field(serialization_alias="schema")
+    positionals: list[str]
+    sure: bool
+    name: str
+    destructive_options: dict[str, list[object]]
+
+
+@router.get("/servers/{server_id}/verbs", response_model_by_alias=True)
+async def list_buttons(found: AboutServer) -> list[ButtonOut]:
+    """The buttons the person has on the server (``app.agent.verbs``)."""
+    return [
+        ButtonOut(
+            verb=button.verb,
+            preset=button.preset,
+            schema_=button.schema,
+            positionals=button.positionals,
+            sure=button.sure,
+            name=button.name,
+            destructive_options=button.destructive_options,
+        )
+        for button in buttons(found.server.role, found.scope.permissions)
+    ]

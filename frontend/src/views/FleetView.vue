@@ -62,7 +62,11 @@ onBeforeUnmount(() => clearInterval(timer))
             :class="{ red: server.reasons.length > 0 }"
             :data-test="`server-${server.name}`"
           >
-            <td data-test="name">{{ server.name }}</td>
+            <td data-test="name">
+              <RouterLink :to="{ name: 'server', params: { serverId: server.id } }">
+                {{ server.name }}
+              </RouterLink>
+            </td>
             <td data-test="project">{{ server.project.name }}</td>
             <td data-test="role">{{ server.role }}</td>
             <td data-test="reasons">

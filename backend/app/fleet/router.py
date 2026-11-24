@@ -12,6 +12,7 @@ The last full ``box-state.v1`` is read by contract 4's own model
 
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.access.actor import Actor
 from app.access.models import Membership
-from app.access.rules import AnyActor
+from app.access.rules import AnyActor, ServerRead, ServerScope
 from app.agent.models import ServerState, Verdict
 from app.core.database import get_db_reader
 from app.fleet.reasons import (
@@ -146,7 +147,29 @@ async def fleet(
             Membership.user_id == actor.user_id, Membership.revoked_at.is_(None)
         )
         query = query.where(Server.project_id.in_(seen))
-    rows = (await session.execute(query)).all()
+    rows = [(s, p, st) for s, p, st in (await session.execute(query)).all()]
+    fleet = await describe(session, rows)
+    fleet.sort(key=lambda each: order_key(each.name, each.reasons))
+    return fleet
+
+
+@router.get("/servers/{server_id}")
+async def server_card(
+    found: Annotated[ServerScope, Depends(ServerRead())],
+) -> FleetServer:
+    """The head of a server's card (DM-155): the fleet's row of one server."""
+    state = await found.scope.session.get(ServerState, found.server.id)
+    [head] = await describe(
+        found.scope.session, [(found.server, found.scope.project, state)]
+    )
+    return head
+
+
+async def describe(
+    session: AsyncSession, rows: Sequence[tuple[Server, Project, ServerState | None]]
+) -> list[FleetServer]:
+    """Every server of ``rows`` as the fleet shows it (changed by DM-155: one
+    builder for the fleet and a server's card)."""
     ids = [server.id for server, _, _ in rows]
     finished = cast(Verdict.body["finished"].astext, TIMESTAMP(timezone=True))
     last = await session.execute(
@@ -213,5 +236,4 @@ async def fleet(
                 reasons=found,
             )
         )
-    fleet.sort(key=lambda each: order_key(each.name, each.reasons))
     return fleet

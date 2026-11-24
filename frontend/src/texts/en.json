@@ -129,5 +129,20 @@
       "machine-behind": "machine behind the release",
       "ssl-due": "certificate due"
     }
+  },
+  "server": {
+    "stands": "What stands (as measured)",
+    "actions": "Actions",
+    "no_actions": "No actions for you here.",
+    "queue": "Queue",
+    "queued": "Queued:",
+    "type_name": "This wipes data. Type the server's name to go on:",
+    "sure": "This is prod. Are you sure?",
+    "ask_destructive": "the project's verb is destructive — confirm by the server's name",
+    "runs": "Runs",
+    "no_runs": "No runs yet.",
+    "running": "running",
+    "required": "Fill the required fields.",
+    "bad_json": "A field is not valid JSON."
   }
 }
