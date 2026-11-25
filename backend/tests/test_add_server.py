@@ -69,46 +69,61 @@ def test_a_token_comes_with_the_release_and_its_install(world: World) -> None:
 def test_probe_DM_157_registered_box_is_in_its_project_only(world: World) -> None:
     """A box registered by the token of a project's screen is a server of that
     project and of no other; the token is spent -- once, and in its hour.
-    The project is the service project S: not the first of the Panel."""
-    made = issue(world, "s")
-    token_id = made["id"]
-    waiting = state(world, "s", token_id)
-    assert waiting == {
-        "id": token_id,
-        "expires_at": made["expires_at"],
-        "used_at": None,
-        "server": None,
+
+    Changed by DM-157 FIX: the token's project was the last created. Two boxes
+    now register by the tokens of two projects -- ``b``, in the middle of
+    every order of the Panel's projects, and the service project ``s`` -- so
+    no rule that sends every box to one project (the first, the last created,
+    the least id) can put both where they belong."""
+    boxes = {
+        "b": ("velo-dev", "git@github.com:o/b.git"),
+        "s": ("meet-dev", "git@github.com:o/s.git"),
     }
-    box = FakeBox(world.client)
-    repo = "git@github.com:o/s.git"
-    assert box.register(str(made["token"]), "meet-dev", repo).status_code == 201
-    used = state(world, "s", token_id)
-    assert isinstance(used, dict)
-    assert set(used) == {"id", "expires_at", "used_at", "server"}
-    assert used["used_at"] is not None
-    assert isinstance(used["server"], dict) and used["server"]["name"] == "meet-dev"
-    project = query_scalar(
-        world.url, "SELECT project_id FROM servers WHERE name = 'meet-dev'"
-    )
-    assert project == world.projects["s"]
+    tokens: dict[str, dict[str, object]] = {}
+    for project, (name, repo) in boxes.items():
+        made = issue(world, project)
+        tokens[project] = made
+        waiting = state(world, project, made["id"])
+        assert waiting == {
+            "id": made["id"],
+            "expires_at": made["expires_at"],
+            "used_at": None,
+            "server": None,
+        }
+        box = FakeBox(world.client)
+        assert box.register(str(made["token"]), name, repo).status_code == 201
+    for project, (name, _) in boxes.items():
+        used = state(world, project, tokens[project]["id"])
+        assert isinstance(used, dict)
+        assert set(used) == {"id", "expires_at", "used_at", "server"}
+        assert used["used_at"] is not None
+        assert isinstance(used["server"], dict) and used["server"]["name"] == name
+        where = query_scalar(
+            world.url, f"SELECT project_id FROM servers WHERE name = '{name}'"
+        )
+        assert where == world.projects[project], (name, project)
 
     def names(who: str) -> set[str]:
         rows = world.call(who, "GET", "/api/v1/servers", expect=200)
         assert isinstance(rows, list)
         return {str(row["name"]) for row in rows}
 
+    assert names("admin_b") == {"velo-dev"}
     assert names("admin_s") == {"meet-dev"}
     assert names("admin_a") == set()
-    assert names("admin_b") == set()
-    again = FakeBox(world.client).register(str(made["token"]), "meet-dev-2", repo)
+    again = FakeBox(world.client).register(
+        str(tokens["b"]["token"]), "velo-dev-2", "git@github.com:o/b.git"
+    )
     assert (again.status_code, again.json()) == (410, {"code": "token-used"})
-    late = issue(world, "s")
+    late = issue(world, "b")
     execute(
         world.url,
         "UPDATE registration_tokens SET expires_at = now() - interval '1 second' "
         f"WHERE id = '{late['id']}'",
     )
-    gone = FakeBox(world.client).register(str(late["token"]), "meet-dev-3", repo)
+    gone = FakeBox(world.client).register(
+        str(late["token"]), "velo-dev-3", "git@github.com:o/b.git"
+    )
     assert (gone.status_code, gone.json()) == (410, {"code": "token-expired"})
 
 
