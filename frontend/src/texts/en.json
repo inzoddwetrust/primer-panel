@@ -159,5 +159,32 @@
     "log": "Log",
     "no_log": "No log.",
     "show_all": "Show all"
+  },
+  "add_server": {
+    "heading": "Add a server",
+    "link": "Add a server",
+    "issue": "Issue a registration token",
+    "once": "The token is shown once: leave this page and it is gone.",
+    "box": "A box with the machine and the product installed",
+    "needs": "The machine v{release} or newer. An older one: update it by its install.sh.",
+    "vps": "A bare VPS",
+    "step_machine": "Install the machine of release v{release}:",
+    "step_product": "Install the product by its passport: pridem install",
+    "step_register": "Run the registration command above.",
+    "warning": "The token works once and for one hour. Run the command from a root shell; the leading space keeps it out of bash's history. Do not run it with sudo: sudo drops the variable.",
+    "waiting": "Waiting for the box to register…",
+    "used": "Registered: server",
+    "expired": "The token expired: issue a new one.",
+    "refusals": "What the box may answer",
+    "refusal": {
+      "token-unknown": "the Panel does not know the token",
+      "token-used": "the token is used: issue a new one",
+      "token-expired": "the token expired: issue a new one",
+      "name-taken": "a server of that name exists",
+      "product-mismatch": "the box's product is not this project's",
+      "protocol-too-old": "the box's machine is too old for the Panel",
+      "protocol-too-new": "the box's machine is too new for the Panel",
+      "register:already": "the box is registered already"
+    }
   }
 }

@@ -1,6 +1,6 @@
 // The pages of the Panel: the sign-in and the person (DM-151); the projects,
 // a project and the superadmin's admins (DM-152); the fleet (DM-154); a
-// server's card (DM-155); a run (DM-156). The screens of the fleet,
+// server's card (DM-155); a run (DM-156); a new server (DM-157). The screens of the fleet,
 // the server, the run and the passport come with their cards.
 //
 // The guard (src/main.ts, `guard`) loads the person for every page but the
@@ -10,6 +10,7 @@
 // every path (nginx/default.conf.template), so /login opens by its link.
 
 import { createRouter, type RouterHistory } from 'vue-router'
+import AddServerView from './views/AddServerView.vue'
 import AdminsView from './views/AdminsView.vue'
 import FleetView from './views/FleetView.vue'
 import LoginView from './views/LoginView.vue'
@@ -34,6 +35,13 @@ export function createPanelRouter(history: RouterHistory) {
       // The screens of access (DM-152)
       { path: '/projects', name: 'projects', component: ProjectsView },
       { path: '/projects/:projectId', name: 'project', component: ProjectView, props: true },
+      // A new server of a project (DM-157)
+      {
+        path: '/projects/:projectId/servers/new',
+        name: 'add-server',
+        component: AddServerView,
+        props: true,
+      },
       { path: '/superadmin/admins', name: 'admins', component: AdminsView },
       { path: '/:rest(.*)*', redirect: '/' },
     ],

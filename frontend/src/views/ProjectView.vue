@@ -212,6 +212,13 @@ onMounted(load)
         {{ t('project.archive') }}
       </button>
 
+      <RouterLink
+        v-if="superadmin || held.includes('servers')"
+        :to="{ name: 'add-server', params: { projectId } }"
+        data-test="add-server"
+      >
+        {{ t('add_server.link') }}
+      </RouterLink>
       <h2>{{ t('project.members') }}</h2>
       <p v-if="!hasAdmin" data-test="no-admin">{{ t('project.no_admin') }}</p>
       <p v-if="members.length === 0">{{ t('project.nobody') }}</p>

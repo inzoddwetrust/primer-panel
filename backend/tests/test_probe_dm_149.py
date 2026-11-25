@@ -216,7 +216,8 @@ def test_probe_DM_149_every_action_has_a_permission() -> None:
     the agent too; the verbs are the pinned machine's (``state`` added).
     Changed by DM-154: and on the fleet's. Changed by DM-155: the routes of a
     server's card (its head, runs and buttons) are counted too. Changed by
-    DM-156: and a run's page and its stream."""
+    DM-156: and a run's page and its stream. Changed by DM-157: and the state
+    of a registration token."""
     # The machine's verbs are actions, each with its permission or READ.
     assert {action.value for action in MACHINE_VERBS} == set(VERBS)
     assert set(ACTION_PERMISSION) == set(Action)
@@ -241,7 +242,7 @@ def test_probe_DM_149_every_action_has_a_permission() -> None:
         *runs_router.routes,
     ]
     counted = _rules_of(every)
-    assert len(counted) == len(_routes()) + 3 + 5 + 7 + 2 + 2
+    assert len(counted) == len(_routes()) + 3 + 6 + 7 + 2 + 2
     assert set(counted.values()) == {1}, counted
     for route in every:
         assert isinstance(route, APIRoute)

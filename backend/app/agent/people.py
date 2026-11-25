@@ -2,7 +2,10 @@
 command in a server's queue, the server's commands.
 
 - **A registration token** -- one-time, an hour (``PRIMER-PANEL-TZ-2`` 4),
-  the permission ``servers``; shown once, kept as its sha256.
+  the permission ``servers``; shown once, kept as its sha256. Changed by
+  DM-157: shown with the release of the Panel's machine and its
+  ``install.sh``; its state -- used, by which server, or not -- is read back
+  without it, for the screen of a new server.
 - **A command** is a verb of the machine the Panel runs (``pridem.verbs.VERBS``
   of the pinned release) for one server, checked before the queue:
   the verb is in the registry; its arguments pass the verb's own model; the
@@ -24,13 +27,21 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
+import pridem
 from fastapi import APIRouter, Depends
 from pridem.verbs import VERBS
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
 from app.access.permissions import Permission
-from app.access.rules import ProjectWrite, Scope, ServerRead, ServerScope, ServerWrite
+from app.access.rules import (
+    ProjectRead,
+    ProjectWrite,
+    Scope,
+    ServerRead,
+    ServerScope,
+    ServerWrite,
+)
 from app.agent.models import Command, CommandState, RegistrationToken, Run, Verdict
 from app.agent.queue import expire_taken
 from app.agent.verbs import CONFIRM, buttons, destructive, needed_permission, needs_sure
@@ -38,20 +49,56 @@ from app.audit.models import ActorKind
 from app.audit.service import record
 from app.core.errors import ErrorClass, PanelError
 from app.core.state import Core, get_core
+from app.projects.models import Server
 
 router = APIRouter(prefix="/api/v1")
 
 TOKEN_TTL = timedelta(hours=1)
 
 ServersWrites = Annotated[Scope, Depends(ProjectWrite(Permission.SERVERS))]
+ServersReads = Annotated[Scope, Depends(ProjectRead(Permission.SERVERS))]
 OnServer = Annotated[ServerScope, Depends(ServerWrite())]
 AboutServer = Annotated[ServerScope, Depends(ServerRead())]
 
 
+RELEASES = "https://github.com/inzoddwetrust/primer/releases/download"
+"""Where the machine's releases are: ``install.sh`` of a release is an asset."""
+
+BOX_REFUSALS = (
+    "token-unknown",
+    "token-used",
+    "token-expired",
+    "name-taken",
+    "product-mismatch",
+    "protocol-too-old",
+    "protocol-too-new",
+    "register:already",
+)
+"""What a box may hear from ``pridem register`` (contract 4's refusals of a
+registration and the machine's own ``register:already``): the screen says
+what each means (DM-157)."""
+
+
 class TokenCreated(BaseModel):
+    """A registration token, shown once, with what the screen of a new server
+    needs (changed by DM-157): the release of the Panel's machine, its
+    ``install.sh`` and the codes a box may hear."""
+
     id: uuid.UUID
     token: str
     expires_at: datetime
+    release: str
+    install_url: str
+    box_refusals: list[str]
+
+
+class TokenState(BaseModel):
+    """A registration token as the screen polls it -- never the token."""
+
+    id: uuid.UUID
+    expires_at: datetime
+    used_at: datetime | None
+    server: dict[str, object] | None
 
 
 class CommandIn(BaseModel):
@@ -98,7 +145,35 @@ async def create_registration_token(scope: ServersWrites) -> TokenCreated:
         object_id=str(row.id),
         details={"expires_at": row.expires_at.isoformat()},
     )
-    return TokenCreated(id=row.id, token=token, expires_at=row.expires_at)
+    return TokenCreated(
+        id=row.id,
+        token=token,
+        expires_at=row.expires_at,
+        release=pridem.__version__,
+        install_url=f"{RELEASES}/v{pridem.__version__}/install.sh",
+        box_refusals=list(BOX_REFUSALS),
+    )
+
+
+@router.get("/projects/{project_id}/registration-tokens/{token_id}")
+async def registration_token(token_id: uuid.UUID, scope: ServersReads) -> TokenState:
+    """Whether a token of the project is used, and by which server (DM-157)."""
+    row = await scope.session.scalar(
+        select(RegistrationToken).where(
+            RegistrationToken.id == token_id,
+            RegistrationToken.project_id == scope.project.id,
+        )
+    )
+    if row is None:
+        raise PanelError(ErrorClass.NOT_FOUND, "Not found")
+    server = None
+    if row.server_id is not None:
+        found = await scope.session.get(Server, row.server_id)
+        if found is not None:
+            server = {"id": str(found.id), "name": found.name}
+    return TokenState(
+        id=row.id, expires_at=row.expires_at, used_at=row.used_at, server=server
+    )
 
 
 @router.post("/servers/{server_id}/commands", status_code=201)

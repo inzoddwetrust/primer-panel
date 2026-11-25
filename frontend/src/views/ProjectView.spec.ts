@@ -195,4 +195,23 @@ describe('a project’s people and invites', () => {
     )
     expect(wrapper.find('[data-test="no-admin"]').exists()).toBe(true)
   })
+
+  it('leads to a new server with the permission servers', async () => {
+    const without = await page(
+      ProjectView,
+      { projectId: 'pa' },
+      me(false, ['deploy_test', 'people']),
+      answers(),
+    )
+    expect(without.wrapper.find('[data-test="add-server"]').exists()).toBe(false)
+    const holder = await page(
+      ProjectView,
+      { projectId: 'pa' },
+      me(false, ['servers', 'people']),
+      answers(),
+    )
+    expect(holder.wrapper.get('[data-test="add-server"]').attributes('href')).toBe(
+      '/projects/pa/servers/new',
+    )
+  })
 })

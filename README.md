@@ -24,6 +24,12 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- A new server (DM-157): `/projects/:projectId/servers/new` -- a one-time
+  registration token (an hour, the permission `servers`), shown once with the
+  command a box registers by (` PRIDEM_REGISTER_TOKEN=<token> pridem register
+  --panel <api>`: the token in the environment, never an argument) and, for a
+  bare VPS, the machine's `install.sh` of the Panel's pinned release; the page
+  waits for the box (`GET .../registration-tokens/{id}`, never the token).
 - A run (DM-156): `/servers/:serverId/runs/:runId` -- its ladder of steps
   live, its log, its verdict, "repeat" and "copy for an LLM" (the report the
   box sent in the envelope, byte for byte). The lines come as server-sent
