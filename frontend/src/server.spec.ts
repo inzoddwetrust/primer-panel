@@ -72,7 +72,8 @@ describe('the rules of a server’s card, as data of the API', () => {
   })
 
   it('labels a button with its preset action', () => {
-    expect(label(button({ verb: 'ssl', preset: { action: 'status' } }))).toBe('ssl status')
+    // Changed by DM-202: ssl status is no button
+    expect(label(button({ verb: 'ssl', preset: { action: 'renew' } }))).toBe('ssl renew')
     expect(label(button({ verb: 'update' }))).toBe('update')
   })
 })

@@ -54,8 +54,8 @@ def commands(world: World) -> object:
     return query_scalar(world.url, "SELECT count(*) FROM commands")
 
 
-# The buttons, written out (not VERBS of the code): the pinned release v0.1.9.
-READING = ["version", "status", "state", "ssl:status", "report"]
+# The buttons, written out (not VERBS of the code): the pinned release v0.1.10.
+READING = ["status"]
 DEPLOY = [
     "gc",
     "ssl:renew",
@@ -64,17 +64,13 @@ DEPLOY = [
     "deploy",
     "rollback",
     "doctor",
-    "logs",
     "start",
     "stop",
     "restart",
 ]
 ALL_BUTTONS = [
-    "version",
     "status",
-    "state",
     "gc",
-    "ssl:status",
     "ssl:renew",
     "install",
     "update",
@@ -83,21 +79,62 @@ ALL_BUTTONS = [
     "doctor",
     "reinstall",
     "destroy",
-    "report",
     "db",
     "backup",
     "seed",
     "verb",
-    "logs",
     "start",
     "stop",
     "restart",
 ]
 
 
+# What is not a button, written out (not VERBS of the code): the pinned release
+# v0.1.10 -- the verbs without a verdict, the values of a field that write none
+# and NOT_A_BUTTON (DM-202), as labels and as commands.
+NOT_BUTTONS = [
+    "version",
+    "state",
+    "report",
+    "logs",
+    "ssl:status",
+    "db:connect",
+    "check",
+    "register",
+]
+NOT_BUTTON_COMMANDS: list[tuple[str, dict[str, object]]] = [
+    ("version", {}),
+    ("state", {}),
+    ("report", {"run_id": "2026-11-24T12:00:00Z-ab12"}),
+    ("logs", {"stack": "velo"}),
+    ("ssl", {"action": "status"}),
+    ("db", {"action": "connect", "stack": "velo"}),
+    ("check", {"path": "/srv/velo"}),
+    ("register", {}),
+]
+
+
+def offered(world: World, who: str, server_id: uuid.UUID) -> set[str]:
+    """What a person's buttons offer: each button's label, and its verb with
+    every value its form offers for ``action``."""
+    found = world.call(who, "GET", f"{API}/{server_id}/verbs", expect=200)
+    assert isinstance(found, list)
+    offers = set(labels(world, who, server_id))
+    for button in found:
+        action = button["schema"]["properties"].get("action")
+        if action is not None:
+            offers |= {f"{button['verb']}:{value}" for value in action["enum"]}
+    return offers
+
+
 def test_probe_DM_155_no_button_without_permission(world: World) -> None:
     """A person has the buttons of the permissions they hold on the server's
-    role, nothing more. The pair: the superadmin has every verb of a box."""
+    role, nothing more. The pair: the superadmin has every verb of a box.
+
+    Changed by DM-202, by the dispatcher's word on its gate: a button is a verb
+    that ends with a verdict -- ``version``, ``state``, ``report``, ``logs``
+    and ``ssl status`` are no buttons any more, so ``READING`` is ``status``
+    alone and the lists are of the pinned release v0.1.10."""
     test, prod = server(world, "velo-test"), server(world, "velo-prod", "prod")
     staff = labels(world, "staff_a", test)  # deploy_test
     assert sorted(staff) == sorted(READING + DEPLOY)
@@ -154,11 +191,11 @@ def test_a_name_with_nothing_destructive_is_refused(world: World) -> None:
 def test_prod_asks_are_you_sure_but_for_reading(world: World) -> None:
     prod = server(world, "velo-prod", "prod")
     queue(world, prod, "update", expect=409)
-    queue(world, prod, "logs", {"stack": "velo"}, expect=409)
+    queue(world, prod, "doctor", expect=409)
     made = queue(world, prod, "update", confirmed=True)
     assert isinstance(made, dict) and made["confirmed_at"] is None
-    for verb, args in (("status", {}), ("state", {}), ("ssl", {"action": "status"})):
-        queue(world, prod, verb, args)
+    # Changed by DM-202: of the reading verbs only status is a button
+    queue(world, prod, "status")
     test = server(world, "velo-test")
     queue(world, test, "update")  # test: no confirmation
 
@@ -175,7 +212,7 @@ def test_a_form_carries_no_file_of_the_box(world: World) -> None:
     assert forms[("reinstall", None)] == {"new_secrets"}
     assert forms[("destroy", None)] == {"all"}
     assert forms[("db", None)] == {"action", "stack", "dump"}
-    assert forms[("ssl", "status")] == set()
+    assert forms[("ssl", "renew")] == set()  # changed by DM-202: status is none
     marks = {b["verb"]: (b["name"], b["destructive_options"]) for b in found}
     assert marks["destroy"] == ("always", {})
     assert marks["db"] == ("when", {"action": ["restore", "reset"]})
@@ -226,3 +263,64 @@ def test_the_runs_last_first_and_one_running(world: World) -> None:
         ("2026-11-24T12:00:00Z-aa02", True, None),
         ("2026-11-24T10:00:00Z-aa01", False, {"result": "green", "verified": False}),
     ]
+
+
+def test_db_s_form_offers_no_connect(world: World) -> None:
+    """``db connect`` writes no verdict (DM-202): the form of the button
+    ``db`` does not offer it."""
+    target = server(world, "velo-test")
+    found = world.call("super", "GET", f"{API}/{target}/verbs", expect=200)
+    assert isinstance(found, list)
+    (db,) = [b for b in found if b["verb"] == "db"]
+    action = db["schema"]["properties"]["action"]
+    assert action["enum"] == ["dump", "restore", "reset", "migrate"]
+
+
+def test_a_non_button_does_not_tell_the_permission(world: World) -> None:
+    """What is not a button is refused as that before the permission: 422,
+    not 403 (DM-202). The pair: a button without its permission is 403."""
+    target = server(world, "velo-test")
+    queue(world, target, "logs", {"stack": "velo"}, who="people_a", expect=422)
+    queue(world, target, "register", who="staff_a", expect=422)
+    queue(world, target, "update", who="people_a", expect=403)
+    assert commands(world) == 0
+
+
+def test_a_file_of_the_box_is_no_field_of_a_button(world: World) -> None:
+    """A form hides the box's files; the queue refuses them too (DM-202). The
+    pair: a field of the form is queued."""
+    target = server(world, "velo-test")
+    for field in ("passport", "ops", "server"):
+        refused = queue(world, target, "update", {field: "/opt/x.yaml"}, expect=422)
+        assert isinstance(refused, dict)
+        message = refused["error"]["message"]
+        assert message == f"{field} is no field of the button update"
+    assert commands(world) == 0
+    queue(world, target, "update", {"tries": ["velo=1.2.3"]})
+    assert commands(world) == 1
+
+
+def test_probe_DM_202_not_a_button_is_not_queued(world: World) -> None:
+    """What is not a button is neither a button nor a command: the eight of
+    the pinned release written out, absent from the superadmin's buttons --
+    every permission held -- and refused ``invalid`` before the queue, on
+    ``test`` and on ``prod``. The pair: a plain button, a preset one and a
+    value of a form are offered and queued."""
+    test, prod = server(world, "velo-test"), server(world, "velo-prod", "prod")
+    for target in (test, prod):
+        assert offered(world, "super", target) & set(NOT_BUTTONS) == set()
+    assert {"status", "ssl:renew", "db:dump"} <= offered(world, "super", test)
+    for verb, args in NOT_BUTTON_COMMANDS:
+        for target, confirmed in ((test, False), (prod, True)):
+            refused = queue(world, target, verb, args, confirmed=confirmed, expect=422)
+            assert isinstance(refused, dict)
+            assert "is no button" in refused["error"]["message"], verb
+    assert commands(world) == 0
+    buttons: list[tuple[str, dict[str, object]]] = [
+        ("status", {}),
+        ("ssl", {"action": "renew"}),
+        ("db", {"action": "dump", "stack": "velo"}),
+    ]
+    for verb, given in buttons:
+        queue(world, test, verb, given)
+    assert commands(world) == 3

@@ -9,9 +9,11 @@ command in a server's queue, the server's commands.
 - **A command** is a verb of the machine the Panel runs (``pridem.verbs.VERBS``
   of the pinned release) for one server, checked before the queue:
   the verb is in the registry; its arguments pass the verb's own model; the
-  person holds the action's permission (``app.access.actions``: by the verb
-  and the server's role -- ``ssl`` with ``action: status`` is reading); a
-  destructive command (``app.agent.verbs``) comes confirmed and its
+  verb with them is a button (``app.agent.verbs.not_a_button``, DM-202: what
+  is not a button is not queued -- ``invalid``, before the permission, so it
+  does not tell which permission a button would need); the person holds the
+  action's permission (``app.access.actions``: by the verb and the server's
+  role); a destructive command (``app.agent.verbs``) comes confirmed and its
   ``confirm`` is the server's name, typed exactly (R-18); on ``prod`` every
   action but reading comes confirmed. Then it is ``queued``, with an audit
   row. Changed by DM-155: the rules of verbs moved to ``app.agent.verbs``.
@@ -44,7 +46,14 @@ from app.access.rules import (
 )
 from app.agent.models import Command, CommandState, RegistrationToken, Run, Verdict
 from app.agent.queue import expire_taken
-from app.agent.verbs import CONFIRM, buttons, destructive, needed_permission, needs_sure
+from app.agent.verbs import (
+    CONFIRM,
+    buttons,
+    destructive,
+    needed_permission,
+    needs_sure,
+    not_a_button,
+)
 from app.audit.models import ActorKind
 from app.audit.service import record
 from app.core.errors import ErrorClass, PanelError
@@ -186,6 +195,9 @@ async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
         verb.args.model_validate(body.args)
     except ValidationError as error:
         raise PanelError(ErrorClass.INVALID, f"the arguments of {body.verb}") from error
+    refusal = not_a_button(body.verb, body.args)
+    if refusal is not None:
+        raise PanelError(ErrorClass.INVALID, refusal)
     needed = needed_permission(body.verb, body.args, server.role)
     if needed is not None and needed not in scope.permissions:
         raise PanelError(ErrorClass.FORBIDDEN, f"The permission {needed} is needed")

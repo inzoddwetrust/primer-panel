@@ -151,7 +151,7 @@ def test_an_unlinked_command_waits_its_ten_minutes(world: World) -> None:
     box = registered(world)
     command = taken(world, box)
     _heartbeat(box, [RUN_ID], [])
-    queue_command(world, server_of(world, box), "state", who="super")
+    queue_command(world, server_of(world, box), "doctor", who="super")  # DM-202
     assert state_of(world, command) == "taken"
 
 

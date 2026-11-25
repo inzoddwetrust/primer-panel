@@ -20,7 +20,10 @@
 only when its verb is a verb of the registry and its arguments, ``confirm``
 aside, pass that verb's model: the machine writes some headers in a form of
 their own (``db reset``, ``ssl renew``, ``seed --list``), and the Panel does
-not translate them. A destructive one asks the name again (R-18).
+not translate them. A destructive one asks the name again (R-18). Changed by
+DM-202: and only when the verb with them is a button
+(``app.agent.verbs.not_a_button``) -- a header of ``register``, or of a run
+given a file of the box (``--passport``), offers no repeat the queue refuses.
 """
 
 import asyncio
@@ -39,7 +42,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.access.rules import ServerRead, ServerScope
 from app.agent.models import Event, Run, ServerState, Verdict
-from app.agent.verbs import CONFIRM, destructive, needed_permission, needs_sure
+from app.agent.verbs import (
+    CONFIRM,
+    destructive,
+    needed_permission,
+    needs_sure,
+    not_a_button,
+)
 from app.core.errors import ErrorClass, PanelError
 from app.core.state import Core, get_core
 from app.runs.status import ENDED, RunStatus, run_status
@@ -112,6 +121,8 @@ def _repeat(found: ServerScope, header: dict[str, object] | None) -> Repeat | No
     try:
         VERBS[verb].args.model_validate(args)
     except ValidationError:
+        return None
+    if not_a_button(verb, args) is not None:
         return None
     role = found.server.role
     needed = needed_permission(verb, args, role)

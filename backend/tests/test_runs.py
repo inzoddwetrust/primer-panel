@@ -215,6 +215,25 @@ def test_repeat_where_the_header_is_the_verb_s(world: World) -> None:
     assert isinstance(repeat, dict) and repeat["sure"] is True
 
 
+def test_no_repeat_of_what_is_not_a_button(world: World) -> None:
+    """A header of a verb that is no button, or given a file of the box,
+    offers no repeat the queue would refuse (DM-202). The pair: the same verb
+    with a field of its form offers it."""
+    target = server(world, "velo-a")
+    heard(world, target)
+    cases: list[tuple[str, dict[str, object], bool]] = [
+        ("register", {}, False),
+        ("update", {"passport": "/opt/pridem/passport.yaml"}, False),
+        ("update", {"tries": ["velo=1.2.3"]}, True),
+    ]
+    for number, (verb, args, offered) in enumerate(cases):
+        run_id = f"2026-11-24T14:00:0{number}Z-ef1{number}"
+        run(world, target, run_id)
+        line(world, run_id, {**header_line(run_id, verb), "args": args})
+        repeat = page(world, "super", target, run_id)["repeat"]
+        assert (repeat is not None) is offered, (verb, args)
+
+
 def test_a_foreign_run_is_not_found(world: World) -> None:
     mine, other = server(world, "velo-a"), server(world, "velo-a2")
     run(world, other, RUN)

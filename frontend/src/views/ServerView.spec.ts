@@ -44,10 +44,10 @@ function buttons(sure: boolean): Button[] {
     },
     {
       verb: 'ssl',
-      preset: { action: 'status' },
+      preset: { action: 'renew' },
       schema: NONE,
       positionals: [],
-      sure: false,
+      sure,
       name: 'never',
       destructive_options: {},
     },
@@ -114,6 +114,8 @@ describe('a server’s card', () => {
   it('test_probe_DM_155_each_button_queues_its_own_verb', async () => {
     // Every kind of button sends exactly its verb and its arguments: none, a
     // preset, a form, a destructive one by the typed name, a project verb.
+    // Changed by DM-202: ssl status is no button (it writes no verdict), so
+    // the button with a preset is ssl renew.
     const { wrapper, asked } = await card()
     const posts = () => asked.filter((a) => a.method === 'POST').map((a) => a.body)
 
@@ -121,7 +123,7 @@ describe('a server’s card', () => {
     await wrapper.get('[data-test="command"]').trigger('submit')
     await flushPromises()
 
-    await wrapper.get('[data-test="button-ssl status"]').trigger('click')
+    await wrapper.get('[data-test="button-ssl renew"]').trigger('click')
     await wrapper.get('[data-test="command"]').trigger('submit')
     await flushPromises()
 
@@ -145,7 +147,7 @@ describe('a server’s card', () => {
 
     expect(posts()).toEqual([
       { verb: 'status', args: {}, confirmed: false },
-      { verb: 'ssl', args: { action: 'status' }, confirmed: false },
+      { verb: 'ssl', args: { action: 'renew' }, confirmed: false },
       { verb: 'deploy', args: { ref: 'v1.2.0' }, confirmed: false },
       {
         verb: 'db',

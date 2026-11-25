@@ -374,7 +374,8 @@ def test_the_queue_gives_one_command_at_a_time(
     box = registered(world)
     server = server_of(world, box)
     assert box.send("GET", "/commands/next").status_code == 204
-    first = queue_command(world, server, "update", {"server": "velo-test-1"})
+    # Changed by DM-202: a file of the box is no field of a button
+    first = queue_command(world, server, "update", {"tries": ["velo=1.2.3"]})
     second = queue_command(world, server, "status")
     assert isinstance(first, dict) and isinstance(second, dict)
     given = box.send("GET", "/commands/next")
@@ -384,7 +385,7 @@ def test_the_queue_gives_one_command_at_a_time(
     assert given.json() == {
         "id": first["id"],
         "verb": "update",
-        "args": {"server": "velo-test-1"},
+        "args": {"tries": ["velo=1.2.3"]},
         "expires_at": expires,
     }
     assert box.send("GET", "/commands/next").status_code == 204  # one taken per server
@@ -415,7 +416,7 @@ def test_a_taken_command_expires_after_ten_minutes(world: World) -> None:
     box = registered(world)
     server = server_of(world, box)
     first = queue_command(world, server, "status")
-    second = queue_command(world, server, "state")
+    second = queue_command(world, server, "doctor")  # DM-202: state is no button
     assert isinstance(first, dict) and isinstance(second, dict)
     assert box.send("GET", "/commands/next").json()["id"] == first["id"]
     execute(
@@ -453,10 +454,14 @@ def test_a_command_of_another_box_is_not_this_box_s(world: World) -> None:
 
 def test_probe_DM_153_one_taken_command_per_server(world: World) -> None:
     """The database holds "one taken per server": a second taken command of
-    the server is refused by its index, whoever writes it."""
+    the server is refused by its index, whoever writes it.
+
+    Changed by DM-202, by the dispatcher's word on its gate: ``state`` is no
+    button and is not queued, so the second command is ``doctor`` -- the probe
+    is of the queue, not of the verb."""
     box = registered(world)
     server = server_of(world, box)
-    for verb in ("status", "state"):
+    for verb in ("status", "doctor"):
         queue_command(world, server, verb)
     assert box.send("GET", "/commands/next").status_code == 200
     with pytest.raises(Exception, match="uq_commands_one_taken"):
@@ -499,9 +504,10 @@ def test_probe_DM_153_command_without_permission_refused_before_queue(
 
 
 def test_reading_verbs_are_any_member_s(world: World) -> None:
+    """Changed by DM-202: of the reading verbs only ``status`` is a button
+    (``state`` and ``ssl status`` write no verdict)."""
     server = server_of(world, registered(world))
-    for verb, args in (("status", {}), ("state", {}), ("ssl", {"action": "status"})):
-        queue_command(world, server, verb, args, who="people_a")
+    queue_command(world, server, "status", who="people_a")
     queue_command(world, server, "ssl", {"action": "renew"}, who="people_a", expect=403)
 
 

@@ -63,7 +63,7 @@ def test_two_polls_of_one_server(
     server = server_of(world, box)
     for round_ in range(5):
         queue_command(world, server, "status", who="super")
-        queue_command(world, server, "state", who="super")
+        queue_command(world, server, "doctor", who="super")  # DM-202: not state
         answers = race(
             migrated_db,
             redis_url,
@@ -166,7 +166,7 @@ def test_a_poll_against_the_expiry_of_a_reader(
     staff = world.people["staff_a"].headers
     for round_ in range(5):
         old = queue_command(world, server, "status", who="super")
-        new = queue_command(world, server, "state", who="super")
+        new = queue_command(world, server, "doctor", who="super")  # DM-202
         assert isinstance(old, dict) and isinstance(new, dict)
         execute(
             migrated_db,

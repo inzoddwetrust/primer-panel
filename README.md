@@ -40,7 +40,9 @@ machine `pridem` installs it from `primer.yaml`.
   is the box's fields (`app/runs/status.py`).
 - A server's card (DM-155): `/servers/:serverId` -- its head (the fleet's
   row), what stands on it as the box measured it, its runs, and the verbs of
-  the machine's registry as buttons (`GET /api/v1/servers/{id}/verbs`): each
+  the machine's registry that end with a verdict as buttons (`GET
+  /api/v1/servers/{id}/verbs`; DM-202: not `check`, `register`, `ssl status`,
+  `db connect` -- and what is not a button is not queued either): each
   a form by the verb's own JSON Schema, only with the permission for the
   server's role; a destructive action is confirmed by the server's name typed
   exactly, any action but reading on `prod` by "are you sure?" -- both
