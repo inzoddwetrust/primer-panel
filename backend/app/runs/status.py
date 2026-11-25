@@ -29,6 +29,16 @@ ENDED = frozenset({RunStatus.FINISHED, RunStatus.ABANDONED})
 """The states after which a run's stream closes."""
 
 
+def dead(
+    run_id: str, journals_without_verdict: Sequence[str], lock_open_by: Sequence[str]
+) -> bool:
+    """The box's word that a run stopped and will not end: its journal is left
+    without a verdict and nobody holds the box's lock. The one rule of
+    ``abandoned`` here and of the expiry of a command whose run died
+    (``app.agent.queue``, DM-196)."""
+    return run_id in journals_without_verdict and not lock_open_by
+
+
 def run_status(
     *,
     run_id: str,
@@ -42,6 +52,6 @@ def run_status(
         return RunStatus.FINISHED
     if heartbeat_at is None or now - heartbeat_at > HEARTBEAT_SILENCE:
         return RunStatus.SILENT
-    if run_id in journals_without_verdict and not lock_open_by:
+    if dead(run_id, journals_without_verdict, lock_open_by):
         return RunStatus.ABANDONED
     return RunStatus.RUNNING

@@ -8,6 +8,7 @@ credential (gate DM-153, R5).
 """
 
 import hashlib
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -85,7 +86,8 @@ async def register(
         public_key(asked.box_key_public)
     except KeyFormError as error:
         raise PanelError(ErrorClass.INVALID, str(error)) from error
-    digest = hashlib.sha256(asked.token.encode()).hexdigest()
+    # the token is a secret of contract 4 (SecretStr since v0.1.10)
+    digest = hashlib.sha256(asked.token.get_secret_value().encode()).hexdigest()
     token = await session.scalar(
         select(RegistrationToken)
         .where(RegistrationToken.token_hash == digest)
@@ -155,11 +157,7 @@ async def heartbeat(box: Box) -> Response:
     }
     # by its aliases: the form box-state.v1 is ``schema``, not the model's
     # ``schema_`` (contract 4's BoxSnapshot does not dump by alias itself)
-    snapshot = (
-        None
-        if beat.state is None
-        else beat.state.model_dump(mode="json", by_alias=True)
-    )
+    snapshot = None if beat.state is None else beat.state.model_dump(mode="json")
     statement = insert(ServerState).values(
         server_id=box.server.id, snapshot=snapshot, **values
     )
@@ -181,17 +179,21 @@ async def next_command(box: Box, core: Annotated[Core, Depends(get_core)]) -> Re
     command = await queue.wait_for_command(core.sessions, server_id)
     if command is None:
         return Response(status_code=204)
+    if command.taken_at is None:
+        raise RuntimeError("a command given without the moment it was taken")
+    # expires_at: the end of the time to take it up (PRIMER-PANEL-TZ-2 6, the
+    # same EXPIRE_AFTER as the lazy expiry). Contract 4 reads no explicit
+    # null: confirmed_at is given only when there is one (changed by DM-196).
     given: dict[str, object] = {
         "id": str(command.id),
         "verb": command.verb,
         "args": command.args,
+        "expires_at": _moment(command.taken_at + queue.EXPIRE_AFTER),
     }
-    confirmed = _moment(command.confirmed_at)
-    if confirmed is not None:
-        given["confirmed_at"] = confirmed
-    # contract 4 is strict: an absent key, never an explicit null
+    if command.confirmed_at is not None:
+        given["confirmed_at"] = _moment(command.confirmed_at)
     message = CommandMessage.model_validate(given)
-    return JSONResponse(message.model_dump(mode="json", exclude_none=True))
+    return JSONResponse(message.model_dump(mode="json"))
 
 
 @router.post("/commands/{command_id}/refusal", status_code=204)
@@ -201,7 +203,7 @@ async def refuse_command(command_id: uuid.UUID, box: Box) -> Response:
         select(Command).where(Command.id == command_id).with_for_update()
     )
     if command is None or command.server_id != box.server.id:
-        raise AgentRefusalError("box-unknown")
+        raise AgentRefusalError("run-foreign")
     await box.session.execute(
         update(Command)
         .where(Command.id == command_id, Command.state == CommandState.TAKEN.value)
@@ -220,17 +222,19 @@ async def events(run_id: str, box: Box) -> EventsAccepted:
 @router.post("/runs/{run_id}/verdict", status_code=204)
 async def verdict(run_id: str, box: Box) -> Response:
     envelope = _parsed(VerdictEnvelope, box.body)
-    await runs.keep_verdict(box.session, box.server, run_id, envelope)
+    signed = json.loads(box.body)["verdict"]
+    await runs.keep_verdict(box.session, box.server, run_id, envelope, signed)
     return Response(status_code=204)
 
 
 @router.post("/history")
 async def history(box: Box) -> HistoryAccepted:
     batch = _parsed(HistoryBatch, box.body)
+    raw = json.loads(box.body)["envelopes"]
     held = [
         await runs.keep_verdict(
-            box.session, box.server, envelope.verdict.run_id, envelope
+            box.session, box.server, envelope.verdict.run_id, envelope, item["verdict"]
         )
-        for envelope in batch.envelopes
+        for envelope, item in zip(batch.envelopes, raw, strict=True)
     ]
     return HistoryAccepted(run_ids=held)

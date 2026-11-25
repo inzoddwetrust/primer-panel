@@ -7,36 +7,20 @@ bytes of the key. A signature is base64 of its raw 64 bytes.
 - A request: ``signing_string`` of contract 4 (``pridem.protocol``) -- the
   method, the path as sent (no query), the time of ``X-Primer-Time`` and the
   SHA-256 of the body -- in UTF-8.
-- A verdict's envelope: ``verdict_bytes`` below.
-
-KNOWN CEILING -- the bytes of a verdict's signature live in the Panel:
-
-1. Mechanics: contract 4 says the envelope carries "the verdict's signature
-   with the box's key" and not what is signed; the machine signs nothing yet
-   (DM-140). The Panel checks the signature over ``verdict_bytes``: the
-   verdict as contract 2 dumps it to JSON, keys sorted, ``,`` and ``:`` with
-   no spaces, UTF-8 (``ensure_ascii=False``). A box signing other bytes gets
-   every verdict kept with ``verified: false``.
-2. Status: acknowledged by design (gate DM-153, R6).
-3. Task: DM-140 -- the machine signs exactly these bytes and takes this
-   function into contract 4.
-4. Unfreeze trigger: ``pridem.protocol`` names the bytes of a verdict's
-   signature (a function beside ``signing_string``).
-5. Agreed fix: this function is deleted and the Panel calls contract 4's.
-6. Rejected: the bytes of ``history/<run_id>.json`` as the file holds them --
-   the Panel receives the verdict parsed inside the envelope's JSON, not the
-   file; checking no signature until DM-140 -- every verdict red with no way
-   to tell a forged one.
+- A verdict's envelope: ``verdict_bytes`` of contract 4 over the verdict as
+  the envelope's JSON carries it -- the object, not a model of it: the box
+  signs the object of ``history/`` (DM-140). Changed by DM-196: the Panel's
+  own copy of these bytes (DM-153, KNOWN CEILING) is gone.
 """
 
 import base64
 import binascii
-import json
+from collections.abc import Mapping
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from pridem.protocol import signing_string
-from pridem.report.schema import Verdict
+from pridem.events import Json
+from pridem.protocol import signing_string, verdict_bytes
 
 KEY_BYTES = 32
 
@@ -79,13 +63,9 @@ def request_holds(
     return _holds(key, signature, message)
 
 
-def verdict_bytes(verdict: Verdict) -> bytes:
-    """What a verdict's envelope signs (module docstring: KNOWN CEILING)."""
-    dumped = verdict.model_dump(mode="json")
-    text = json.dumps(dumped, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return text.encode()
-
-
-def verdict_holds(key: Ed25519PublicKey, signature: str, verdict: Verdict) -> bool:
-    """The envelope's signature holds for its verdict."""
+def verdict_holds(
+    key: Ed25519PublicKey, signature: str, verdict: Mapping[str, Json]
+) -> bool:
+    """The envelope's signature holds for its verdict, the JSON object as the
+    envelope carries it."""
     return _holds(key, signature, verdict_bytes(verdict))

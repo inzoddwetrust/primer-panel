@@ -20,6 +20,7 @@ import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
+from pridem.events import Json
 from pridem.protocol import (
     BOX_HEADER,
     PROTOCOL_HEADER,
@@ -35,8 +36,11 @@ AGENT = "/agent/v1"
 RUN_ID = "2026-11-24T12:00:00Z-ab12"
 
 
-def header_line(run_id: str = RUN_ID, verb: str = "status") -> dict[str, object]:
-    return {
+def header_line(
+    run_id: str = RUN_ID, verb: str = "status", command: str | None = None
+) -> dict[str, object]:
+    """Changed by DM-196: with the Panel's ``command`` when given (DM-138)."""
+    line: dict[str, object] = {
         "event": "header",
         "seq": 1,
         "at": "2026-11-24T12:00:00.000Z",
@@ -48,6 +52,9 @@ def header_line(run_id: str = RUN_ID, verb: str = "status") -> dict[str, object]
         "started": "2026-11-24T12:00:00Z",
         "composition_before": {"pridem": "0.1.8"},
     }
+    if command is not None:
+        line["command"] = command
+    return line
 
 
 def log_line(seq: int) -> dict[str, object]:
@@ -73,8 +80,10 @@ def finished_line(seq: int) -> dict[str, object]:
     }
 
 
-def verdict(run_id: str = RUN_ID) -> dict[str, object]:
-    return {
+def verdict(run_id: str = RUN_ID, command: str | None = None) -> dict[str, Json]:
+    """A verdict of v0.1.9's form, written out; with ``command`` -- v0.1.10's
+    (DM-138; changed by DM-196)."""
+    found: dict[str, Json] = {
         "schema": 1,
         "run_id": run_id,
         "verb": "status",
@@ -89,6 +98,9 @@ def verdict(run_id: str = RUN_ID) -> dict[str, object]:
         "steps": [],
         "report": {"failures": [], "incomplete": []},
     }
+    if command is not None:
+        found["command"] = command
+    return found
 
 
 @dataclass

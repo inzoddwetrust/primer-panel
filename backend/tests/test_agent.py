@@ -20,6 +20,7 @@ from pridem.protocol import (
     EventBatch,
     VerdictEnvelope,
     rendered_schema,
+    verdict_bytes,
 )
 from pridem.report.box_snapshot import BoxSnapshot
 from pridem.report.schema import Verdict
@@ -27,7 +28,6 @@ from pridem.report.schema import Verdict
 import app.agent.router as agent_router
 from app.agent import queue
 from app.agent.router import router
-from app.agent.signature import verdict_bytes
 from tests.conftest import API_HOST, execute, query_scalar
 from tests.fake_box import (
     RUN_ID,
@@ -52,6 +52,7 @@ CODES = {
     "clock-skew",
     "signature-bad",
     "box-unknown",
+    "run-foreign",
 }
 
 
@@ -109,12 +110,14 @@ def refused(answer: object, code: str, status: int) -> None:
 
 
 def envelope(
-    box: FakeBox, run_id: str = RUN_ID, *, good: bool = True
+    box: FakeBox, run_id: str = RUN_ID, *, good: bool = True, command: str | None = None
 ) -> VerdictEnvelope:
-    body = Verdict.model_validate(verdict(run_id))
-    signed = verdict_bytes(body) if good else verdict_bytes(body) + b" "
+    """Changed by DM-196: signed by contract 4's verdict_bytes over the verdict
+    as an object (DM-140), the verdict carrying ``command`` when given."""
+    raw = verdict(run_id, command)
+    signed = verdict_bytes(raw) if good else verdict_bytes(raw) + b" "
     return VerdictEnvelope(
-        verdict=body,
+        verdict=Verdict.model_validate(raw),
         signature=box.sign(signed),
         report_llm="a report",
         signed_on_send=False,
@@ -149,7 +152,10 @@ def test_a_box_registers_by_its_token(world: World) -> None:
 def test_registration_refusals(world: World) -> None:
     box = FakeBox(world.client)
     repo = "git@github.com:o/a.git"
-    refused(box.register("no-such-token", "x1", repo), "token-unknown", 404)
+    # Changed by DM-196: a token of contract 4 is at least 16 characters long
+    unknown = "no-such-token-0123456789"
+    refused(box.register(unknown, "x1", repo), "token-unknown", 404)
+    assert box.register("short", "x1", repo).status_code == 422
     token = token_for(world)
     refused(box.register(token, "x1", repo, protocol="2"), "protocol-too-new", 400)
     refused(box.register(token, "x1", repo, protocol=""), "protocol-too-old", 400)
@@ -373,10 +379,13 @@ def test_the_queue_gives_one_command_at_a_time(
     assert isinstance(first, dict) and isinstance(second, dict)
     given = box.send("GET", "/commands/next")
     assert given.status_code == 200
+    # Changed by DM-196: a command carries the end of its time to be taken
+    expires = given.json().pop("expires_at")
     assert given.json() == {
         "id": first["id"],
         "verb": "update",
         "args": {"server": "velo-test-1"},
+        "expires_at": expires,
     }
     assert box.send("GET", "/commands/next").status_code == 204  # one taken per server
     refusal = box.send(
@@ -437,7 +446,7 @@ def test_a_command_of_another_box_is_not_this_box_s(world: World) -> None:
         mine.send(
             "POST", f"/commands/{command['id']}/refusal", {"code": "verb-unknown"}
         ),
-        "box-unknown",
+        "run-foreign",  # changed by DM-196: contract 4's code (box-unknown before)
         403,
     )
 
@@ -605,12 +614,12 @@ def test_a_run_is_its_box_s(world: World) -> None:
     )
     refused(
         other.send("POST", f"/runs/{RUN_ID}/events", batch([log_line(2)])),
-        "box-unknown",
+        "run-foreign",  # changed by DM-196: contract 4's code (box-unknown before)
         403,
     )
     refused(
         other.send("POST", f"/runs/{RUN_ID}/verdict", envelope(other)),
-        "box-unknown",
+        "run-foreign",
         403,
     )
     answer = mine.send(

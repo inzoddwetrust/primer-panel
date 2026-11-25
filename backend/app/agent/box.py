@@ -5,8 +5,8 @@ The paths of the agent (``/agent/v1/``) have no session and no check of
 when its headers sign it (``PRIMER-PANEL-TZ-2`` section 3) -- checked in
 order, the first that fails answers:
 
-1. the headers of contract 4 are there (``signed_headers``) -- else
-   ``signature-bad``;
+1. the headers of contract 4 are there and of their form (``signed_headers``:
+   one exception, ``HeaderMissing``, since v0.1.10) -- else ``signature-bad``;
 2. the version of ``X-Primer-Protocol`` is read (``accepts``: N and N-1) --
    else ``protocol-too-old`` / ``protocol-too-new``;
 3. ``X-Primer-Box`` names a registered server, not detached -- else
@@ -36,7 +36,6 @@ from pridem.protocol import (
     accepts,
     signed_headers,
 )
-from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +50,7 @@ STATUS: dict[str, int] = {
     "signature-bad": 401,
     "clock-skew": 401,
     "box-unknown": 403,
+    "run-foreign": 403,
     "protocol-too-old": 400,
     "protocol-too-new": 400,
     "token-unknown": 404,
@@ -117,7 +117,7 @@ class BoxSigned(Rule):
     ) -> BoxRequest:
         try:
             headers = signed_headers(dict(request.headers))
-        except (HeaderMissing, ValidationError) as error:
+        except HeaderMissing as error:
             raise AgentRefusalError("signature-bad") from error
         refusal = accepts(headers.protocol)
         if refusal is not None:

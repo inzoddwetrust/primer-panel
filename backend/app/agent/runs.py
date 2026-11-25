@@ -12,19 +12,27 @@ sections 7--9).
   ``verified: false`` -- red in the fleet, never silent. A verdict with no run
   yet (``history``, a run of the console) makes its run.
 - **A run is its box's**: a ``run_id`` the Panel holds for another server is
-  ``box-unknown`` to this one (gate DM-153, R8).
+  ``run-foreign`` to this one (contract 4 of v0.1.10; ``box-unknown`` before).
+- **A run and its command** (DM-196): the ``command`` of the header line or of
+  the verdict, whichever comes first, links them (``app.agent.queue.link``);
+  the verdict makes the command ``done``. The signature of the envelope is
+  checked over the verdict as the envelope's JSON carries it -- the object
+  the box signed (``app.agent.signature``).
 """
 
 import logging
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from pridem.events import Json
 from pridem.protocol import EventBatch, VerdictEnvelope
 from pridem.state import HeaderLine, RunFinishedLine
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent import queue
 from app.agent.box import AgentRefusalError
 from app.agent.models import Event, Run, Verdict
 from app.agent.signature import public_key, verdict_holds
@@ -42,7 +50,7 @@ def _moment(value: str | datetime) -> str:
 
 
 async def _run_of(session: AsyncSession, server_id: uuid.UUID, run_id: str) -> Run:
-    """The run, made if new, locked; another server's -- ``box-unknown``."""
+    """The run, made if new, locked; another server's -- ``run-foreign``."""
     await session.execute(
         insert(Run)
         .values(run_id=run_id, server_id=server_id)
@@ -52,7 +60,7 @@ async def _run_of(session: AsyncSession, server_id: uuid.UUID, run_id: str) -> R
         select(Run).where(Run.run_id == run_id).with_for_update()
     )
     if run is None or run.server_id != server_id:
-        raise AgentRefusalError("box-unknown")
+        raise AgentRefusalError("run-foreign")
     return run
 
 
@@ -81,6 +89,8 @@ async def keep_events(
             run.verb = run.verb or line.verb
             run.actor = run.actor or line.actor.model_dump(mode="json")
             run.started_at = run.started_at or _moment(line.started)
+            if line.command is not None:
+                await queue.link(session, server_id, run, line.command)
         if isinstance(line, RunFinishedLine):
             run.ended_at = run.ended_at or line.at
             run.outcome = run.outcome or line.result
@@ -107,8 +117,14 @@ async def keep_events(
 
 
 async def keep_verdict(
-    session: AsyncSession, server: Server, run_id: str, envelope: VerdictEnvelope
+    session: AsyncSession,
+    server: Server,
+    run_id: str,
+    envelope: VerdictEnvelope,
+    signed: Mapping[str, Json],
 ) -> str:
+    """Keep the envelope; ``signed`` -- its verdict as the envelope's JSON
+    carries it."""
     verdict = envelope.verdict
     if verdict.run_id != run_id:
         raise PanelError(ErrorClass.INVALID, "the verdict names another run")
@@ -118,8 +134,10 @@ async def keep_verdict(
     run.started_at = run.started_at or _moment(verdict.started)
     run.ended_at = run.ended_at or _moment(verdict.finished)
     run.outcome = run.outcome or verdict.result
+    if verdict.command is not None:
+        await queue.link(session, server.id, run, verdict.command)
     verified = verdict_holds(
-        public_key(server.box_key_public), envelope.signature, verdict
+        public_key(server.box_key_public), envelope.signature, signed
     )
     await session.execute(
         insert(Verdict)
@@ -134,6 +152,7 @@ async def keep_verdict(
         )
         .on_conflict_do_nothing(index_elements=["run_id"])
     )
+    await queue.finish(session, run)
     if not verified:
         logger.warning(
             "a verdict whose signature does not hold, kept unverified",

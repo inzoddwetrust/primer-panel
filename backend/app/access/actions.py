@@ -38,6 +38,7 @@ class Action(StrEnum):
     STOP = "stop"
     LOGS = "logs"
     GC = "gc"
+    REGISTER = "register"
     SSL = "ssl"
     SEED = "seed"
     DB = "db"
@@ -92,6 +93,9 @@ ACTION_PERMISSION: Mapping[Action, Permission | ByRole | None] = {
     Action.STOP: DEPLOY,
     Action.LOGS: DEPLOY,
     Action.GC: DEPLOY,
+    # The box's registration in the Panel (DM-139, changed by DM-196): who
+    # issues the token registers the box; not a button (app.agent.verbs).
+    Action.REGISTER: Permission.SERVERS,
     Action.SSL: DEPLOY,
     Action.SEED: Permission.SEEDS,
     Action.DB: Permission.DB,

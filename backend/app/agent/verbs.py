@@ -3,9 +3,8 @@ server's card and the rules a command meets before the queue -- all here, the
 page holds none (R-18, R-19).
 
 - **A button** is a verb of the pinned release's registry (``VERBS``), in its
-  order -- the machine has no groups -- but those of ``NOT_ON_A_BOX``
-  (``check`` reads a repository at a path, not a box); and only when the
-  person holds its permission on the server's role. ``Verb.box`` does not
+  order -- the machine has no groups -- but those of ``NOT_A_BUTTON``; and
+  only when the person holds its permission on the server's role. ``Verb.box`` does not
   tell it: it says whether a verb takes the box's lock -- ``state`` reads a
   box without it. ``ssl`` is two buttons:
   ``ssl status`` (reading) and ``ssl renew``.
@@ -53,8 +52,11 @@ BOX_PATHS = frozenset({"passport", "ops", "server"})
 
 CONFIRM = "confirm"
 
-NOT_ON_A_BOX = frozenset({"check"})
-"""Verbs of the machine that read a repository, not a box: no button."""
+NOT_A_BUTTON = frozenset({"check", "register"})
+"""Verbs of the machine a command of the queue cannot run (changed by DM-196):
+``check`` reads a repository at a path, not a box; ``register`` takes its
+one-time token from the box's environment (``PRIDEM_REGISTER_TOKEN``, DM-139),
+which no command of the queue carries."""
 
 DESTRUCTIVE_ALWAYS = frozenset({"destroy", "reinstall"})
 DESTRUCTIVE_WHEN: Mapping[str, Mapping[str, tuple[object, ...]]] = {
@@ -126,7 +128,7 @@ def buttons(role: str, held: frozenset[Permission]) -> list[Button]:
     """The buttons a person holding ``held`` has on a server of ``role``."""
     found: list[Button] = []
     for name, verb in VERBS.items():
-        if name in NOT_ON_A_BOX:
+        if name in NOT_A_BUTTON:
             continue
         for preset in _variants(name):
             needed = needed_permission(name, preset, role)
