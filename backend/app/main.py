@@ -39,6 +39,8 @@ from app.core.redis import REDIS, make_redis, ping
 from app.core.state import Core, install
 from app.editions import EDITIONS
 from app.fleet.router import router as fleet_router
+from app.ops.repo import OpsPlaces, OpsRepo
+from app.ops.router import router as passport_router
 from app.runs.router import router as runs_router
 from primer_report import Limits, PrimerReport, Seams
 
@@ -54,11 +56,14 @@ logger = logging.getLogger(__name__)
 def create_app(
     settings: Settings | None = None,
     comms_transport: httpx.AsyncBaseTransport | None = None,
+    ops_places: OpsPlaces | None = None,
 ) -> ASGIApp:
     """Build the app; the settings default to the environment.
 
     ``comms_transport`` is the seam of the tests: a stand-in of comms' sign-in
-    module by its form. The application itself has none (DM-150)."""
+    module by its form. The application itself has none (DM-150).
+    ``ops_places`` -- where the clone of primer-ops and its two keys are; the
+    stack's own paths unless a test names others (DM-158)."""
     settings = settings or Settings()
     engine = make_engine(settings.database_url.get_secret_value())
     redis = make_redis(settings.redis_url.get_secret_value())
@@ -75,6 +80,7 @@ def create_app(
         sessions=make_sessions(engine),
         redis=redis,
         comms=comms,
+        ops=OpsRepo(settings.ops_repo, ops_places or OpsPlaces()),
     )
     head = script_head()
 
@@ -126,6 +132,7 @@ def create_app(
     app.include_router(agent_router)
     app.include_router(fleet_router)
     app.include_router(runs_router)
+    app.include_router(passport_router)
     install_agent_refusals(app)
     report = PrimerReport(
         service=SERVICE,

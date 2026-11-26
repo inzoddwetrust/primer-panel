@@ -16,6 +16,14 @@ frontend's (DM-150).
 -- are optional until comms is a dependency of the Panel (DM-160 makes them
 required seams ``from: comms``); without them sign-in answers ``unavailable``.
 
+``OPS_REPO`` -- the address of ``primer-ops``, where the passports of the
+boxes live (DM-158): ``ssh://git@ssh.github.com:443/<owner>/<repo>.git``, the
+one GitHub host the Panel holds the keys of (its way out is port 443), or
+``file://`` -- anything else stops the start, as the machine refuses an ops
+repository off its pinned hosts (``ops_key:host-unpinned``). Its two keys --
+the write key and the Panel's age key -- are files, not variables
+(``app.ops.repo.OpsPlaces``).
+
 There is no module-level instance: ``create_app`` builds one and hands it to
 the request through ``app.core.state`` (the owner's decision of 24.11: the
 blank's form, no global singletons).
@@ -27,6 +35,12 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.editions import EDITIONS
+
+OPS_ADDRESS = re.compile(
+    r"ssh://git@ssh\.github\.com:443/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git"
+    r"|file:///[^\s]+"
+)
+"""The addresses of ``primer-ops`` the Panel takes (DM-158)."""
 
 _HOST = re.compile(
     r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
@@ -54,6 +68,17 @@ class Settings(BaseSettings):
     comms_service_token: SecretStr | None = Field(
         default=None, validation_alias="COMMS_SERVICE_TOKEN"
     )
+    ops_repo: str = Field(validation_alias="OPS_REPO", min_length=1)
+
+    @field_validator("ops_repo")
+    @classmethod
+    def _ops_address(cls, value: str) -> str:
+        if not OPS_ADDRESS.fullmatch(value):
+            raise ValueError(
+                "OPS_REPO is ssh://git@ssh.github.com:443/<owner>/<repo>.git "
+                "or file://<path>: the Panel holds the keys of no other host"
+            )
+        return value
 
     @field_validator("domain_frontend", "domain_api")
     @classmethod

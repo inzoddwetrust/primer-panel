@@ -5,6 +5,7 @@ its service are gone, ``REDIS_PASSWORD`` came with Redis.
 
 Changed by DM-149: ``SUPERADMIN_TELEGRAM_ID`` (a param of the passport).
 Changed by DM-150: ``DOMAIN_FRONTEND`` and ``DOMAIN_API``.
+Changed by DM-158: ``OPS_REPO`` (a param of the passport).
 """
 
 from pathlib import Path
@@ -21,6 +22,7 @@ STACK_ENV = {
     "SUPERADMIN_TELEGRAM_ID": "7000000001",
     "DOMAIN_FRONTEND": "panel.probe.test",
     "DOMAIN_API": "api.panel.probe.test",
+    "OPS_REPO": "file:///nonexistent/primer-ops-of-the-probe",
 }
 
 

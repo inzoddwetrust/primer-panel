@@ -23,6 +23,7 @@ from starlette.types import ASGIApp
 from app.access.actor import Identity, current_identity
 from app.core.errors import ErrorClass, PanelError
 from app.main import create_app
+from app.ops.repo import OpsPlaces
 from tests.conftest import SUPERADMIN_ID, execute, settings_for
 from tests.failing import inner_app
 
@@ -38,10 +39,19 @@ async def identity_from_header(request: Request) -> Identity:
 
 
 def access_app(
-    database_url: str, redis_url: str, superadmin: int = SUPERADMIN_ID
+    database_url: str,
+    redis_url: str,
+    superadmin: int = SUPERADMIN_ID,
+    *,
+    ops: tuple[str, OpsPlaces] | None = None,
 ) -> ASGIApp:
-    """The Panel with the stand-in sign-in."""
-    served = create_app(settings_for(database_url, redis_url, superadmin))
+    """The Panel with the stand-in sign-in. Changed by DM-158: with ``ops``,
+    the address of a primer-ops of the test and the Panel's places."""
+    if ops is None:
+        served = create_app(settings_for(database_url, redis_url, superadmin))
+    else:
+        settings = settings_for(database_url, redis_url, superadmin, ops=ops[0])
+        served = create_app(settings, ops_places=ops[1])
     inner_app(served).dependency_overrides[current_identity] = identity_from_header
     return served
 

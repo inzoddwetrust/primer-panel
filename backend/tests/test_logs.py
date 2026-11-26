@@ -59,6 +59,7 @@ def _serve_and_log(
         SUPERADMIN_TELEGRAM_ID="7000000001",
         DOMAIN_FRONTEND="panel.example.test",
         DOMAIN_API="api.panel.example.test",
+        OPS_REPO="file:///nonexistent/primer-ops-of-the-tests",
         PRIMER_RELEASE=RELEASE,
         PRIMER_COMMIT=COMMIT,
     )

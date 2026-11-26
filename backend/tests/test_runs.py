@@ -24,7 +24,15 @@ from app.access import sessions as panel_sessions
 from app.core.database import make_engine, make_sessions
 from app.runs import router as runs_router
 from app.runs.router import stream_lines
-from tests.conftest import API_HOST, BACKEND, COMMIT, RELEASE, execute, query_scalar
+from tests.conftest import (
+    API_HOST,
+    BACKEND,
+    COMMIT,
+    OPS_NOWHERE,
+    RELEASE,
+    execute,
+    query_scalar,
+)
 from tests.fake_box import finished_line, header_line, log_line
 from tests.people import World
 
@@ -387,6 +395,7 @@ def test_probe_DM_156_sse_by_parts_over_tcp(
         SUPERADMIN_TELEGRAM_ID=str(superadmin.telegram_id),
         DOMAIN_FRONTEND="panel.example.test",
         DOMAIN_API=API_HOST,
+        OPS_REPO=OPS_NOWHERE,
         PRIMER_RELEASE=RELEASE,
         PRIMER_COMMIT=COMMIT,
     )

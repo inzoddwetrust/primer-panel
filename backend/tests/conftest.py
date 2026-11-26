@@ -35,6 +35,7 @@ from app.core.database import ALEMBIC_INI, at_head, make_engine
 from app.main import create_app
 
 if TYPE_CHECKING:
+    from tests.ops import OpsSide
     from tests.people import World
     from tests.signin import SignIn
 from primer_report import Limits, PrimerReport, Seams
@@ -56,6 +57,8 @@ TEST_REDIS_DB = 15
 
 # The Telegram id the suite's passport names the superadmin by (DM-149).
 SUPERADMIN_ID = 7000000001
+OPS_NOWHERE = "file:///nonexistent/primer-ops-of-the-tests"
+"""The address of primer-ops of a test that does not read it (DM-158)."""
 
 
 @pytest.fixture(scope="session")
@@ -211,6 +214,7 @@ def settings_for(
     superadmin: int = SUPERADMIN_ID,
     *,
     comms: bool = False,
+    ops: str = OPS_NOWHERE,
 ) -> Settings:
     """Settings of a test app on the given database and Redis.
 
@@ -218,7 +222,10 @@ def settings_for(
     a test names another.
 
     Changed by DM-150: the hosts of the frontend and the API; with ``comms``,
-    the address and the service token of comms' sign-in module."""
+    the address and the service token of comms' sign-in module.
+
+    Changed by DM-158: ``OPS_REPO`` -- the address of primer-ops, ``ops``;
+    unless a test names one, an address where nothing is."""
     values: dict[str, object] = {
         "EDITION": "core",
         "PRIMER_RELEASE": RELEASE,
@@ -228,6 +235,7 @@ def settings_for(
         "SUPERADMIN_TELEGRAM_ID": superadmin,
         "DOMAIN_FRONTEND": FRONTEND_HOST,
         "DOMAIN_API": API_HOST,
+        "OPS_REPO": ops,
     }
     if comms:
         values["COMMS_API_URL"] = COMMS_URL
@@ -323,6 +331,28 @@ def world(access_client: TestClient, migrated_db: str) -> "World":
     from tests.people import build_world
 
     return build_world(access_client, migrated_db)
+
+
+@pytest.fixture
+def ops_side(tmp_path: Path) -> "OpsSide":
+    """A primer-ops of the test: a bare repository on disk, the Panel's and a
+    box's age keys (tests/ops.py). Added by DM-158."""
+    from tests.ops import make_ops
+
+    return make_ops(tmp_path)
+
+
+@pytest.fixture
+def ops_world(
+    migrated_db: str, redis_url: str, clean_redis: Redis, ops_side: "OpsSide"
+) -> Iterator["World"]:
+    """The world of tests/people.py on a Panel that reads ``ops_side``.
+    Added by DM-158."""
+    from tests.people import access_app, build_world
+
+    app = access_app(migrated_db, redis_url, ops=(ops_side.url, ops_side.places))
+    for client in client_for(app):
+        yield build_world(client, migrated_db)
 
 
 @pytest.fixture

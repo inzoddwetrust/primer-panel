@@ -26,6 +26,14 @@ env:
   SUPERADMIN_TELEGRAM_ID: { source: param }                      # the Panel's one superadmin
   DOMAIN_FRONTEND:   { source: passport, key: domains.frontend }  # where sign-in sends the browser back
   DOMAIN_API:        { source: passport, key: domains.api }       # the return address of sign-in
+  # primer-ops, the passports of the boxes (DM-158): its address, the write
+  # key and the Panel's age key -- the two keys files, never variables
+  OPS_REPO:          { source: param }                             # ssh://git@ssh.github.com:443/<owner>/<repo>.git
+  OPS_WRITE_KEY:     { source: asked, file: { path: /run/panel/ops-write.key } }
+  OPS_AGE_KEY:       { source: asked, file: { path: /run/panel/ops-age.key } }
+
+egress:                               # the way out of the Panel's container (DM-146, DM-158)
+  - ssh.github.com                    # git over ssh to primer-ops, port 443
 
 host:
   domains: [frontend, api]

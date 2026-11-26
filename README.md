@@ -24,6 +24,17 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
+- A server's passport (DM-158, the API; its screen -- part B): `GET
+  /api/v1/servers/{id}/passport` reads it from `primer-ops` with the Panel's
+  age key -- the secrets of `asked` and `policies.tls` by name and state,
+  never a value; `PUT .../passport/field` and `.../passport/secret` (the
+  permission `passport`) are one commit of `primer-ops` each, the value of a
+  secret on `sops`' stdin, the version one up, checked by the pinned machine's
+  loader; a stale `base` is refused 409, no merge. `POST .../passport/apply`
+  queues `update`; it is applied when a green verdict read the server's file
+  at the head. `OPS_REPO` is `ssh.github.com:443` or `file://`; the write key
+  and the age key are files of the stack (`app/ops/`). A server whose box reads
+  its passport from a file (`state: file`) is not edited here.
 - A new server (DM-157): `/projects/:projectId/servers/new` -- a one-time
   registration token (an hour, the permission `servers`), shown once with the
   command a box registers by (` PRIDEM_REGISTER_TOKEN=<token> pridem register

@@ -83,3 +83,24 @@ def test_a_build_without_release_or_commit_stops_by_name(daemon: None) -> None:
         result = build("backend", "panel-probe/backend:incomplete", "runtime", args)
         assert result.returncode != 0
         assert f"{missing} build argument is not set" in result.stderr
+
+
+def test_the_backend_carries_git_ssh_and_sops(backend_runtime: str) -> None:
+    """The passports of primer-ops (DM-158): git and ssh from apt, sops at the
+    machine's pin -- run as the image's own user."""
+    for argv, said in (
+        (["git", "--version"], "git version "),
+        (["ssh", "-V"], "OpenSSH_"),
+        (["sops", "--version", "--disable-version-check"], "sops 3.13.3"),
+    ):
+        out = docker(
+            "run",
+            "--rm",
+            "--label",
+            LABEL,
+            "--entrypoint",
+            argv[0],
+            backend_runtime,
+            *argv[1:],
+        )
+        assert said in out.stdout + out.stderr, (argv, out.stdout, out.stderr)

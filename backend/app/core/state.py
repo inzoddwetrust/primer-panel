@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.access.comms import CommsClient
 from app.config import Settings
+from app.ops.repo import OpsRepo
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,8 @@ class Core:
     redis: Redis
     # The sign-in module of comms; None until comms is connected (DM-160).
     comms: CommsClient | None
+    # The Panel's clone of primer-ops (DM-158).
+    ops: OpsRepo
 
 
 def install(app: FastAPI, core: Core) -> None:

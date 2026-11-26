@@ -14,6 +14,7 @@ services:
       SUPERADMIN_TELEGRAM_ID: ${SUPERADMIN_TELEGRAM_ID:?}
       DOMAIN_FRONTEND: ${DOMAIN_FRONTEND:?}
       DOMAIN_API: ${DOMAIN_API:?}
+      OPS_REPO: ${OPS_REPO:?}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

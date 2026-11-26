@@ -17,6 +17,10 @@ published, as on a box) and the log is read after them.
 
 The pair: a ``/health`` with one field taken away is not passed by the same
 functions -- the check can be red.
+
+Changed by DM-158, by the dispatcher's word: ``OPS_REPO`` among the stand-ins
+-- the compose file asks ``${OPS_REPO:?}`` of the stack; an address of
+``file://`` where nothing is passes the settings, and the app starts on it.
 """
 
 import json
@@ -49,6 +53,7 @@ STACK_ENV = {
     "SUPERADMIN_TELEGRAM_ID": "7000000001",
     "DOMAIN_FRONTEND": "panel.probe.test",
     "DOMAIN_API": "api.panel.probe.test",
+    "OPS_REPO": "file:///nonexistent/primer-ops-of-the-probe",
 }
 
 READ = (

@@ -26,6 +26,7 @@ command in a server's queue, the server's commands.
 import hashlib
 import secrets
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -185,8 +186,19 @@ async def registration_token(token_id: uuid.UUID, scope: ServersReads) -> TokenS
     )
 
 
+Needed = Callable[[str, dict[str, object], str], Permission | None]
+"""The permission a command needs, by its verb, arguments and server's role."""
+
+
 @router.post("/servers/{server_id}/commands", status_code=201)
 async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
+    return CommandOut.model_validate(await enqueue(found, body, needed_permission))
+
+
+async def enqueue(found: ServerScope, body: CommandIn, needed_of: Needed) -> Command:
+    """The command, checked and queued: the one way into the queue (changed by
+    DM-158: "apply" of a passport goes this way too, ``needed_of`` naming its
+    own permission, ``passport`` -- PRIMER-PANEL-TZ-1, the action table)."""
     scope, server = found.scope, found.server
     verb = VERBS.get(body.verb)
     if verb is None:
@@ -198,7 +210,7 @@ async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
     refusal = not_a_button(body.verb, body.args)
     if refusal is not None:
         raise PanelError(ErrorClass.INVALID, refusal)
-    needed = needed_permission(body.verb, body.args, server.role)
+    needed = needed_of(body.verb, body.args, server.role)
     if needed is not None and needed not in scope.permissions:
         raise PanelError(ErrorClass.FORBIDDEN, f"The permission {needed} is needed")
     # Changed by DM-155: the destructive actions are the table of
@@ -243,7 +255,7 @@ async def queue_command(body: CommandIn, found: OnServer) -> CommandOut:
             "confirmed": body.confirmed,
         },
     )
-    return CommandOut.model_validate(command)
+    return command
 
 
 @router.get("/servers/{server_id}/commands")

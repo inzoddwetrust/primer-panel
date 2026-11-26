@@ -18,6 +18,7 @@ from app.access.rules import AnyActor, Rule
 from app.agent.people import router as servers_router
 from app.agent.router import router as agent_router
 from app.fleet.router import router as fleet_router
+from app.ops.router import router as passport_router
 from app.runs.router import router as runs_router
 from tests.conftest import SUPERADMIN_ID, client_for, query_scalar
 from tests.people import World, access_app
@@ -217,7 +218,8 @@ def test_probe_DM_149_every_action_has_a_permission() -> None:
     Changed by DM-154: and on the fleet's. Changed by DM-155: the routes of a
     server's card (its head, runs and buttons) are counted too. Changed by
     DM-156: and a run's page and its stream. Changed by DM-157: and the state
-    of a registration token."""
+    of a registration token. Changed by DM-158, by the dispatcher's word on
+    its gate: and the four routes of a server's passport."""
     # The machine's verbs are actions, each with its permission or READ.
     assert {action.value for action in MACHINE_VERBS} == set(VERBS)
     assert set(ACTION_PERMISSION) == set(Action)
@@ -240,9 +242,10 @@ def test_probe_DM_149_every_action_has_a_permission() -> None:
         *agent_router.routes,
         *fleet_router.routes,
         *runs_router.routes,
+        *passport_router.routes,
     ]
     counted = _rules_of(every)
-    assert len(counted) == len(_routes()) + 3 + 6 + 7 + 2 + 2
+    assert len(counted) == len(_routes()) + 3 + 6 + 7 + 2 + 2 + 4
     assert set(counted.values()) == {1}, counted
     for route in every:
         assert isinstance(route, APIRoute)
