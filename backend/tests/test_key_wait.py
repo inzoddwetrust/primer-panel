@@ -221,3 +221,89 @@ def test_the_stream_says_the_wait_when_it_changes(
     assert kinds == ["line", "status", "line", "key", "line", "line", "key"]
     keys = [json.loads(part.split("data: ")[1]) for part in got if "event: key" in part]
     assert [k["state"] for k in keys] == ["waiting", "granted"]
+
+
+def other_step(seq: int, status: str) -> dict[str, object]:
+    """A step after the key's, of another stack and name."""
+    body = {
+        **finished_step(seq, status),
+        "stack": "velo",
+        "name": "build" if status == "ok" else "tests",
+        "order": 7,
+    }
+    if status == "ok":
+        body["verify"] = {"image_id": "sha256:0"}
+    else:
+        body["reason"] = {"code": "command-failed", "argv": ["x"], "exit_code": 1}
+    return body
+
+
+def _key_of_the_stream(target: uuid.UUID, migrated_db: str) -> list[dict[str, object]]:
+    """The first ``event: key`` the stream says of the whole run, read from its
+    start."""
+
+    async def scenario() -> list[dict[str, object]]:
+        engine = make_engine(migrated_db)
+
+        async def never() -> bool:
+            return False
+
+        said: list[dict[str, object]] = []
+        try:
+            stream = stream_lines(make_sessions(engine), target, RUN, 0, never)
+            # the whole run is written: its lines, the state, then the key --
+            # one poll says it all; a key never said ends in a timeout here
+            while not said:
+                part = await asyncio.wait_for(anext(stream), 5)
+                if part.startswith("event: key"):
+                    said.append(json.loads(part.split("data: ")[1]))
+            return said
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(scenario())
+
+
+def test_the_first_closing_line_after_the_notice_decides(
+    world: World, migrated_db: str
+) -> None:
+    """A run as a box writes it: the key's step ends, other steps go on -- one
+    ``ok``, one ``failed`` -- and the run ends. The wait is decided by the
+    first closing line after the notice, not by the last of the run: the key
+    came (``granted``), on the run's page and in the stream's ``event: key``.
+    FIX DM-159: before it every case had one closing line, the first was the
+    last."""
+    target = waiting_run(
+        world,
+        notice(2),
+        finished_step(3, "ok"),
+        other_step(4, "ok"),
+        other_step(5, "failed"),
+        run_finished(6),
+    )
+    found = wait_of(world, target)
+    assert isinstance(found, dict)
+    assert (found["state"], found["reason"]) == ("granted", None)
+    told = _key_of_the_stream(target, migrated_db)
+    assert [(k["state"], k["reason"]) for k in told] == [("granted", None)]
+
+
+def test_a_key_that_did_not_come_stays_so_whatever_follows(
+    world: World, migrated_db: str
+) -> None:
+    """The pair: the key's step fails, a later step goes ``ok``, the run ends
+    -- the wait is ``not_granted`` with the key step's reason."""
+    target = waiting_run(
+        world,
+        notice(2),
+        finished_step(3, "failed"),
+        other_step(4, "ok"),
+        run_finished(5),
+    )
+    found = wait_of(world, target)
+    assert isinstance(found, dict)
+    assert (found["state"], found["reason"]) == ("not_granted", "deploy_key:no-access")
+    told = _key_of_the_stream(target, migrated_db)
+    assert [(k["state"], k["reason"]) for k in told] == [
+        ("not_granted", "deploy_key:no-access")
+    ]
