@@ -20,6 +20,31 @@ export interface RunPage {
   report_llm: string | null
   repeat: { verb: string; args: Record<string, unknown>; sure: boolean; name: boolean } | null
   last_seq: number
+  key_wait: KeyWait | null
+}
+
+// A run waiting for a key to a repository (DM-159), as the API reads it from
+// the run's lines: the box goes on by itself once the key works.
+export interface KeyWait {
+  run_id: string
+  repo: string
+  key: string
+  page: string | null
+  write: boolean
+  why: string | null
+  wait_s: number
+  again: boolean
+  at: string
+  state: 'waiting' | 'granted' | 'not_granted' | 'ended'
+  reason: string | null
+}
+
+// When a wait ends: its start and its seconds; null -- the run does not wait
+// (a write key that waits for nothing).
+export function waitsUntil(wait: KeyWait): string | null {
+  if (wait.wait_s <= 0) return null
+  const end = new Date(Date.parse(wait.at) + wait.wait_s * 1000)
+  return end.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
 // A line of the run's journal (contract 2): its kind is `event`.

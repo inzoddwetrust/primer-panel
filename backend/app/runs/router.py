@@ -3,11 +3,16 @@
 - ``GET /api/v1/servers/{server_id}/runs/{run_id}`` -- the run, its state
   (``app.runs.status``), its verdict, the report for an LLM the box sent in
   the envelope (``report_llm``, byte for byte -- the Panel builds none, R-15)
-  and what "repeat" queues, if anything.
+  and what "repeat" queues, if anything; its wait for a key (DM-159).
+- ``GET /api/v1/servers/{server_id}/key-wait`` -- the wait for a key of the
+  server's running run, for its card (DM-159); ``null`` -- none.
 - ``GET /api/v1/streams/servers/{server_id}/runs/{run_id}`` -- its lines as
   server-sent events, as they come: ``id`` is the line's ``seq``,
   ``event: line`` its body as the box sent it; ``event: status`` when the
-  state changes; a keepalive comment every ``KEEPALIVE_S``. It goes on from
+  state changes; ``event: key`` when the run's wait for a key changes --
+  the first one as soon as there is a wait, a stream that comes back gets it
+  first; a run that never waits sends none (``app.runs.keys``, DM-159); a
+  keepalive comment every ``KEEPALIVE_S``. It goes on from
   ``Last-Event-ID``; only lines one after another are sent -- a gap waits for
   its line (PRIMER-PANEL-TZ-2 7). It closes when the run is finished or
   abandoned, or when the client goes. Every ask of the database is a short
@@ -51,6 +56,7 @@ from app.agent.verbs import (
 )
 from app.core.errors import ErrorClass, PanelError
 from app.core.state import Core, get_core
+from app.runs.keys import KeyWait, key_wait, running_run
 from app.runs.status import ENDED, RunStatus, run_status
 
 router = APIRouter(prefix="/api/v1")
@@ -88,6 +94,7 @@ class RunPage(BaseModel):
     report_llm: str | None
     repeat: Repeat | None
     last_seq: int
+    key_wait: KeyWait | None
 
 
 async def _state_of(session: AsyncSession, server_id: uuid.UUID, run: Run) -> RunStatus:
@@ -185,6 +192,7 @@ async def run_page(run_id: str, found: AboutServer) -> RunPage:
         report_llm=None if verdict is None else verdict.report_llm,
         repeat=_repeat(found, header),
         last_seq=len(lines),
+        key_wait=await key_wait(session, run_id),
     )
 
 
@@ -204,18 +212,24 @@ async def stream_lines(
     """The run's lines after ``after``, as they come (module docstring)."""
     sent = after
     shown: RunStatus | None = None
+    told: dict[str, object] | None = None
     quiet = 0.0
     while True:
         async with sessions() as session:
             run = await _run(session, server_id, run_id)
             lines = await _gapless(session, run_id, sent)
             status = await _state_of(session, server_id, run)
+            waits = await key_wait(session, run_id)
         for seq, body in lines:
             yield _event("line", body, seq)
             sent = seq
         if status != shown:
             yield _event("status", {"status": status.value, "last_seq": sent})
             shown = status
+        now = None if waits is None else waits.model_dump()
+        if now != told:
+            yield _event("key", now)
+            told = now
         if status in ENDED and not lines:
             return
         if await gone():
@@ -225,6 +239,14 @@ async def stream_lines(
         if quiet >= KEEPALIVE_S:
             yield ": keepalive\n\n"
             quiet = 0.0
+
+
+@router.get("/servers/{server_id}/key-wait")
+async def server_key_wait(found: AboutServer) -> KeyWait | None:
+    """The card's: the wait for a key of the server's running run (DM-159)."""
+    session = found.scope.session
+    run_id = await running_run(session, found.server.id)
+    return None if run_id is None else await key_wait(session, run_id)
 
 
 @router.get("/streams/servers/{server_id}/runs/{run_id}")

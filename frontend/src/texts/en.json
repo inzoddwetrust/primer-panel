@@ -227,5 +227,21 @@
     "rule": {
       "keep_releases": "1 removes the directory of the previous release: a rollback fetches its sources again."
     }
+  },
+  "key": {
+    "state": {
+      "waiting": "The run waits for a key to a repository",
+      "granted": "The key works: the run went on",
+      "not_granted": "The key did not come in time",
+      "ended": "The run ended while it waited for a key"
+    },
+    "read": "Add this key, read only, to",
+    "write": "Add this key, with write access, to",
+    "copy": "Copy the key",
+    "page": "The repository's deploy keys on GitHub",
+    "until": "It waits until",
+    "no_wait": "The run does not wait: add the key, the next run sees it.",
+    "again": "The key was taken and refused once: GitHub has not spread it yet.",
+    "run": "The run"
   }
 }

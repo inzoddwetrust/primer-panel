@@ -4,8 +4,17 @@ import { useI18n } from 'vue-i18n'
 import { ApiError, useApi } from '../api/client'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import ConfirmBox from '../components/ConfirmBox.vue'
+import KeyWaitNote from '../components/KeyWait.vue'
 import { useRuntimeConfig } from '../config-key'
-import { ladder, logLines, useStream, type Line, type RunPage, type StreamSource } from '../run'
+import {
+  ladder,
+  logLines,
+  useStream,
+  type KeyWait,
+  type Line,
+  type RunPage,
+  type StreamSource,
+} from '../run'
 
 // A run (DM-156): its ladder of steps live, its log, its verdict, "repeat"
 // and "copy for an LLM". The lines come by the stream as the box sends them;
@@ -23,6 +32,7 @@ const error = ref<unknown>(null)
 const all = ref(false)
 const pending = ref<{ expected: string | null } | null>(null)
 const queued = ref(false)
+const keyWait = ref<KeyWait | null>(null)
 let stream: StreamSource | undefined
 
 const steps = computed(() => ladder(lines.value))
@@ -34,6 +44,7 @@ async function load(): Promise<void> {
   try {
     run.value = await api.get<RunPage>(base())
     status.value = run.value.status
+    keyWait.value = run.value.key_wait
   } catch (failure: unknown) {
     if (failure instanceof ApiError && failure.status === 404) {
       missing.value = true
@@ -47,6 +58,9 @@ function listen(): void {
   stream = open(`${config.apiOrigin}/api/v1/streams/servers/${props.serverId}/runs/${props.runId}`)
   stream.addEventListener('line', (event) => {
     lines.value = [...lines.value, JSON.parse(event.data) as Line]
+  })
+  stream.addEventListener('key', (event) => {
+    keyWait.value = JSON.parse(event.data) as KeyWait | null
   })
   stream.addEventListener('status', (event) => {
     const next = (JSON.parse(event.data) as { status: string }).status
@@ -108,6 +122,7 @@ onBeforeUnmount(() => stream?.close())
       <ApiErrorNote v-if="error" :error="error" />
       <h1>{{ run?.verb ?? t('fleet.no_data') }} · {{ runId }}</h1>
       <p data-test="status">{{ status ? t(`run.status.${status}`) : t('common.loading') }}</p>
+      <KeyWaitNote v-if="keyWait" :wait="keyWait" />
       <p v-if="run?.verdict" data-test="verdict">
         {{ run.verdict.result }} ({{ run.verdict.exit_code }}, {{ run.verdict.finished }})
         <span v-if="!run.verdict.verified">— {{ t('fleet.unverified') }}</span>

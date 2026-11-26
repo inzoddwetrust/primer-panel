@@ -44,6 +44,7 @@ function runPage(extra: Partial<RunPage> = {}): RunPage {
     report_llm: null,
     repeat: null,
     last_seq: 0,
+    key_wait: null,
     ...extra,
   }
 }
@@ -221,5 +222,37 @@ describe('a run', () => {
     const missing = await view({})
     expect(missing.wrapper.find('[data-test="not-found"]').exists()).toBe(true)
     expect(missing.streams).toEqual([])
+  })
+})
+
+describe('a run waiting for a key (DM-159)', () => {
+  const wait = {
+    run_id: 'r1',
+    repo: 'git@github.com:o/velo.git',
+    key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl pridem x',
+    page: 'https://github.com/o/velo/settings/keys',
+    write: false,
+    why: null,
+    wait_s: 1800,
+    again: false,
+    at: '2026-11-26T12:00:03.000Z',
+    state: 'waiting' as const,
+    reason: null,
+  }
+
+  it('shows the wait the page reads, and the stream changes it', async () => {
+    const { wrapper, streams } = await view({ [PAGE]: runPage({ key_wait: wait }) })
+    expect(wrapper.get('[data-test="key-key"]').text()).toBe(wait.key)
+    streams[0]!.send('key', { ...wait, state: 'granted' })
+    await flushPromises()
+    expect(wrapper.get('[data-test="key-wait"] h2').text()).toContain('went on')
+  })
+
+  it('shows a wait that comes by the stream', async () => {
+    const { wrapper, streams } = await view({ [PAGE]: runPage() })
+    expect(wrapper.find('[data-test="key-wait"]').exists()).toBe(false)
+    streams[0]!.send('key', wait)
+    await flushPromises()
+    expect(wrapper.get('[data-test="key-page"]').attributes('href')).toBe(wait.page)
   })
 })

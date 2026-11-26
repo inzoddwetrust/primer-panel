@@ -47,6 +47,15 @@ machine `pridem` installs it from `primer.yaml`.
   --panel <api>`: the token in the environment, never an argument) and, for a
   bare VPS, the machine's `install.sh` of the Panel's pinned release; the page
   waits for the box (`GET .../registration-tokens/{id}`, never the token).
+- A run waiting for a key to a repository (DM-159): on the run's page and the
+  server's card, the public key (no secret: every member of the project sees
+  it), the page of the repository's deploy keys when the machine named one,
+  the rights it needs, until when -- read from the run's own lines: the last
+  `notice` `key_needed` opens the wait, the first `step_finished` after it
+  closes it (`ok` -- granted), `run_finished` ends it (`app/runs/keys.py`).
+  The box goes on by itself; the Panel sends it nothing. The page gets
+  `key_wait`, the stream `event: key`, the card `GET
+  /api/v1/servers/{id}/key-wait`.
 - A run (DM-156): `/servers/:serverId/runs/:runId` -- its ladder of steps
   live, its log, its verdict, "repeat" and "copy for an LLM" (the report the
   box sent in the envelope, byte for byte). The lines come as server-sent

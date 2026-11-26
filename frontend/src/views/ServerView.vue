@@ -4,8 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { ApiError, useApi } from '../api/client'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import ConfirmBox from '../components/ConfirmBox.vue'
+import KeyWaitNote from '../components/KeyWait.vue'
 import SchemaForm from '../components/SchemaForm.vue'
 import type { FleetServer } from '../fleet'
+import type { KeyWait } from '../run'
 import {
   argsFrom,
   emptyForm,
@@ -30,6 +32,7 @@ const { t } = useI18n()
 const api = useApi()
 const head = ref<FleetServer | null>(null)
 const runs = ref<RunRow[]>([])
+const keyWait = ref<KeyWait | null>(null)
 const buttons = ref<Button[]>([])
 const missingServer = ref(false)
 const error = ref<unknown>(null)
@@ -57,6 +60,16 @@ async function load(): Promise<void> {
       return
     }
     error.value = failure
+  }
+}
+
+// The wait for a key of the server's running run (DM-159); a server not seen
+// is the head's to say, as for the buttons.
+async function loadKey(): Promise<void> {
+  try {
+    keyWait.value = await api.get<KeyWait | null>(`${base()}/key-wait`)
+  } catch (failure: unknown) {
+    if (!(failure instanceof ApiError && failure.status === 404)) error.value = failure
   }
 }
 
@@ -125,7 +138,11 @@ function confirm(): void {
 onMounted(() => {
   void load()
   void loadButtons()
-  timer = setInterval(() => void load(), REFRESH_MS)
+  void loadKey()
+  timer = setInterval(() => {
+    void load()
+    void loadKey()
+  }, REFRESH_MS)
 })
 onBeforeUnmount(() => clearInterval(timer))
 </script>
@@ -154,6 +171,7 @@ onBeforeUnmount(() => clearInterval(timer))
             >{{ t(`fleet.reason.${reason}`) }}
           </span>
         </p>
+        <KeyWaitNote v-if="keyWait" :wait="keyWait" :server-id="serverId" />
         <h2>{{ t('server.stands') }}</h2>
         <p v-if="head.stacks === null" data-test="stands">{{ t('fleet.no_data') }}</p>
         <ul v-else data-test="stands">
