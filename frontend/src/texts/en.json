@@ -186,5 +186,46 @@
       "protocol-too-new": "the box's machine is too new for the Panel",
       "register:already": "the box is registered already"
     }
+  },
+  "passport": {
+    "title": "Passport",
+    "to_server": "The server's card",
+    "reread": "Read again",
+    "version": "Version",
+    "base": "read at",
+    "problems": "The machine refuses this passport — an edit that passes its checks mends it:",
+    "fields": "Fields",
+    "secrets": "Secrets",
+    "no_secrets": "No secrets.",
+    "state": {
+      "set": "set",
+      "switched_off": "switched off by an option"
+    },
+    "edit": "Change",
+    "replace": "Replace",
+    "new_secret": "A new secret",
+    "stack": "stack",
+    "key": "key",
+    "saved": "Saved, version",
+    "bad_json": "The value is not valid: a number or JSON as the field has.",
+    "absent": "This server has no passport in primer-ops.",
+    "not_recipient": "The Panel's key does not open this passport. Add the Panel's age key as a recipient of it in primer-ops:",
+    "copy_key": "Copy the key",
+    "file": "This server reads its passport from a file on the box: an edit in the Panel would not reach it.",
+    "damaged": {
+      "sops-damaged": "The passport in primer-ops is not a sops file the Panel decrypts: mend it in primer-ops.",
+      "not-a-file": "The passport's path in primer-ops is not a file — a link or a directory: mend it in primer-ops."
+    },
+    "apply": "Apply",
+    "apply_state": {
+      "applied": "applied",
+      "pending": "waiting to be applied",
+      "unknown": "not known yet"
+    },
+    "queued": "Queued: update",
+    "sure": "This is prod. Apply the passport?",
+    "rule": {
+      "keep_releases": "1 removes the directory of the previous release: a rollback fetches its sources again."
+    }
   }
 }

@@ -644,3 +644,64 @@ def test_the_ssh_of_git(ops_side: OpsSide) -> None:
     ):
         assert part in ssh, part
     assert "accept-new" not in ssh
+
+
+# --- a passport primer-ops holds damaged (DM-158 B) ---------------------------------
+
+
+@pytest.mark.parametrize("reason", ["sops-damaged", "not-a-file"])
+def test_a_damaged_passport_is_a_state(
+    ops_world: World, ops_side: OpsSide, reason: str
+) -> None:
+    """What lies in primer-ops is wrong, not the request: the reading answers
+    200 with the state and its reason, an edit and "apply" 409. The pair: the
+    same server with its passport mended reads ``ready``."""
+    if reason == "sops-damaged":
+        base = ops_side.put(SERVER, b"not: a sops file\n")
+    else:
+        ops_side.put("velo-test-2", ops_side.encrypt(PASSPORT.format(name=SERVER)))
+        base = ops_side.put_link(SERVER, "velo-test-2.yaml")
+    sid = server(ops_world)
+    found = read(ops_world, sid)
+    assert found == {
+        "state": "damaged",
+        "reason": reason,
+        "base": base,
+        "panel_key": ops_side.panel_public,
+    }
+    refused = put_field(
+        ops_world, sid, base, ["domains", "api"], "a.example", expect=409
+    )
+    assert f"damaged ({reason})" in refused["error"]["message"]  # type: ignore[index]
+    refused = apply(ops_world, sid, expect=409)
+    assert f"damaged ({reason})" in refused["error"]["message"]  # type: ignore[index]
+    assert ops_side.head() == base
+    ops_side.put(SERVER, ops_side.encrypt(PASSPORT.format(name=SERVER)))
+    assert read(ops_world, sid)["state"] == "ready"
+
+
+def test_apply_refuses_what_the_box_would_fail_on(
+    ops_world: World, ops_side: OpsSide
+) -> None:
+    """No passport, or one the machine refuses: "apply" is refused before the
+    queue. The pair: a passport the Panel's key does not open is applied --
+    the box's key may open it."""
+    absent = server(ops_world, name="velo-test-2")
+    refused = apply(ops_world, absent, expect=409)
+    assert "no passport" in refused["error"]["message"]  # type: ignore[index]
+    sid = server(ops_world)
+    broken = PASSPORT.format(name=SERVER).replace(
+        "keep_releases: 2", "keep_releases: 0"
+    )
+    ops_side.put(SERVER, ops_side.encrypt(broken))
+    refused = apply(ops_world, sid, expect=409)
+    assert "the machine refuses" in refused["error"]["message"]  # type: ignore[index]
+    assert query_scalar(ops_world.url, "SELECT count(*) FROM commands") == 0
+    text = PASSPORT.format(name=SERVER)
+    ops_side.put(SERVER, ops_side.encrypt(text, [ops_side.box_public]))
+    assert apply(ops_world, sid)["verb"] == "update"
+
+
+def test_apply_with_ops_out_of_reach_is_unavailable(world: World) -> None:
+    sid = server(world)
+    apply(world, sid, expect=503)

@@ -112,9 +112,22 @@ class OpsSide:
         _run("git", "pull", "--quiet", "origin", "main", cwd=self.work)
         file = self.work / "passports" / f"{name}.yaml"
         file.parent.mkdir(exist_ok=True)
+        if file.is_symlink():
+            file.unlink()  # a file again, not written through the link
         file.write_bytes(content)
         _run("git", "add", "-A", cwd=self.work)
         _run("git", "commit", "--quiet", "-m", f"owner: {name}", cwd=self.work)
+        _run("git", "push", "--quiet", "origin", "HEAD:main", cwd=self.work)
+        return self.head()
+
+    def put_link(self, name: str, target: str) -> str:
+        """``passports/<name>.yaml`` made a symlink to ``target``, pushed."""
+        _run("git", "pull", "--quiet", "origin", "main", cwd=self.work)
+        file = self.work / "passports" / f"{name}.yaml"
+        file.unlink()
+        file.symlink_to(target)
+        _run("git", "add", "-A", cwd=self.work)
+        _run("git", "commit", "--quiet", "-m", f"owner: {name} a link", cwd=self.work)
         _run("git", "push", "--quiet", "origin", "HEAD:main", cwd=self.work)
         return self.head()
 

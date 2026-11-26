@@ -14,7 +14,11 @@
   its passport from a file on the box: an edit here would not reach it -- the
   box of the Panel, R-25, and every box without an ops directory). ``file`` is
   the fact of the box, the newest verified verdict whose ``fetch_passport``
-  says ``source: file``; an edit and "apply" answer it 409.
+  says ``source: file``; an edit and "apply" answer it 409. ``damaged``
+  (changed by DM-158 B): the file is no sops file the Panel decrypts
+  (``reason: sops-damaged``) or the path is no file (``not-a-file``) -- what
+  lies in primer-ops is wrong, not the request; an edit and "apply" answer it
+  409.
 - **An edit** is one commit under the Panel's lock of ``primer-ops`` (a
   Postgres advisory lock: one operation on the clone at a time); its message
   names the server, the version, the path -- never a value -- and the person
@@ -28,7 +32,11 @@
   at most.
 - **"Apply"** is the command ``update`` of the queue, through the one way in
   (``app.agent.people.enqueue``: not a button, prod's "are you sure?"), with
-  the permission ``passport`` (PRIMER-PANEL-TZ-1). It is **applied** when the
+  the permission ``passport`` (PRIMER-PANEL-TZ-1). Changed by DM-158 B: it
+  reads primer-ops first (503 when it is out of reach) and refuses 409 a
+  passport the box's ``update`` would fail on -- ``absent``, ``damaged``,
+  ``invalid`` (``UNAPPLIABLE``); the permission is asked before anything that
+  tells the state. It is **applied** when the
   newest green verified verdict whose ``fetch_passport`` read ``primer-ops``
   read the server's file as it is at the head: the same blob at its
   ``ops_commit`` (contract 2, the step's fact).
@@ -40,6 +48,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
@@ -58,6 +67,7 @@ from app.core.state import Core, get_core
 from app.ops.passport import (
     DamagedError,
     NotRecipientError,
+    Plain,
     age_public_key,
     checked,
     decrypted,
@@ -92,6 +102,15 @@ ROLE = (
     "server.role is the owner's to change, not a field: it decides whether a "
     "deploy needs deploy_test or deploy_prod"
 )
+DAMAGED = "the passport in primer-ops is damaged ({reason}): mend it in primer-ops"
+UNAPPLIABLE = {
+    "absent": "no passport of this server in primer-ops: the box would fail on it",
+    "damaged": DAMAGED,
+    "invalid": "the machine refuses this passport: the box would fail on it",
+}
+"""What "apply" refuses before the queue: the box's ``update`` would fail on
+it anyway (the dispatcher's word on DM-158 B). ``not-recipient`` is not here:
+the box's key may open what the Panel's does not."""
 FIXED = {("server", "name"): NAME, ("server", "role"): ROLE}
 """Fields no edit reaches, by its own path or by one above it (the
 dispatcher's word on DM-158 A): the name the box reads its passport by, and
@@ -226,40 +245,62 @@ async def _applied(found: ServerScope, repo: OpsRepo, head: Found) -> dict[str, 
     return {"commit": commit, "state": "applied" if same else "pending"}
 
 
+@dataclass(frozen=True)
+class Seen:
+    """A server's passport as primer-ops holds it at the head: its state of
+    the reading, and what the state has."""
+
+    state: str
+    head: str | None = None
+    current: Found | None = None
+    plain: Plain | None = None
+    reason: str | None = None
+
+
+async def _seen(repo: OpsRepo, server: str) -> Seen:
+    """The passport at the head, read under the lock (the caller's)."""
+    head = await repo.head()
+    if head is None:
+        return Seen("absent")
+    try:
+        current = await repo.file(head, passport_path(server))
+    except NotAFileError:
+        return Seen("damaged", head, reason="not-a-file")
+    if current is None:
+        return Seen("absent", head)
+    try:
+        plain = checked(repo.places, await decrypted(repo.places, current.content))
+    except NotRecipientError:
+        return Seen("not-recipient", head, current)
+    except DamagedError:
+        return Seen("damaged", head, current, reason="sops-damaged")
+    state = "invalid" if plain.problems else "ready"
+    return Seen(state, head, current, plain)
+
+
 @router.get("")
 async def read_passport(found: Reading, core: CoreOf) -> dict[str, object]:
     if await _is_file(found):
         return {"state": "file"}
     repo = core.ops
-    path = passport_path(found.server.name)
     try:
         async with ops_lock(core):
             panel_key = await _panel_key(repo)
-            head = await repo.head()
-            current = None if head is None else await repo.file(head, path)
-            if head is None or current is None:
-                return {"state": "absent", "panel_key": panel_key}
-            try:
-                plain = checked(
-                    repo.places, await decrypted(repo.places, current.content)
-                )
-            except NotRecipientError:
-                return {"state": "not-recipient", "panel_key": panel_key}
-            applied = await _applied(found, repo, current)
+            seen = await _seen(repo, found.server.name)
+            if seen.plain is None or seen.current is None:
+                answer: dict[str, object] = {"state": seen.state}
+                if seen.reason is not None:
+                    answer.update(reason=seen.reason, base=seen.head)
+                return {**answer, "panel_key": panel_key}
+            applied = await _applied(found, repo, seen.current)
     except (OpsCommandError, OSError) as error:
         raise _unreachable(error) from error
-    except DamagedError as error:
-        raise PanelError(
-            ErrorClass.INVALID, "not a sops file the Panel decrypts"
-        ) from error
-    except NotAFileError as error:
-        raise PanelError(ErrorClass.INVALID, f"{path} is not a file") from error
     return {
-        "state": "invalid" if plain.problems else "ready",
-        "base": head,
-        "version": plain.version(),
-        **view(plain.data),
-        "problems": plain.problems,
+        "state": seen.state,
+        "base": seen.head,
+        "version": seen.plain.version(),
+        **view(seen.plain.data),
+        "problems": seen.plain.problems,
         "apply": applied,
         "panel_key": panel_key,
     }
@@ -327,10 +368,12 @@ async def _edit(
         ) from error
     except DamagedError as error:
         raise PanelError(
-            ErrorClass.INVALID, "not a sops file the Panel decrypts"
+            ErrorClass.CONFLICT, DAMAGED.format(reason="sops-damaged")
         ) from error
     except NotAFileError as error:
-        raise PanelError(ErrorClass.INVALID, f"{where} is not a file") from error
+        raise PanelError(
+            ErrorClass.CONFLICT, DAMAGED.format(reason="not-a-file")
+        ) from error
     record(
         found.scope.session,
         actor_kind=ActorKind.USER,
@@ -363,10 +406,18 @@ async def edit_secret(body: SecretIn, found: Writing, core: CoreOf) -> EditOut:
 
 
 @router.post("/apply", status_code=201)
-async def apply_passport(body: ApplyIn, found: Writing) -> CommandOut:
+async def apply_passport(body: ApplyIn, found: Writing, core: CoreOf) -> CommandOut:
     _needs_passport(found, Action.PASSPORT_APPLY)
     if await _is_file(found):
         raise PanelError(ErrorClass.CONFLICT, FILE)
+    try:
+        async with ops_lock(core):
+            seen = await _seen(core.ops, found.server.name)
+    except (OpsCommandError, OSError) as error:
+        raise _unreachable(error) from error
+    if seen.state in UNAPPLIABLE:
+        why = UNAPPLIABLE[seen.state].format(reason=seen.reason)
+        raise PanelError(ErrorClass.CONFLICT, why)
     command = await enqueue(
         found,
         CommandIn(verb="update", args={}, confirmed=body.confirmed),

@@ -137,6 +137,11 @@ onBeforeUnmount(() => clearInterval(timer))
       <ApiErrorNote v-if="error" :error="error" />
       <template v-if="head">
         <h1 data-test="server-name">{{ head.name }}</h1>
+        <p>
+          <RouterLink :to="{ name: 'passport', params: { serverId } }" data-test="to-passport">{{
+            t('passport.title')
+          }}</RouterLink>
+        </p>
         <p data-test="head">
           {{ head.project.name }} · {{ head.role }} · {{ t('fleet.heartbeat') }}:
           {{ head.heartbeat_at ?? t('fleet.no_data') }} · {{ t('fleet.machine') }}:

@@ -24,7 +24,10 @@ machine `pridem` installs it from `primer.yaml`.
   (append only). The superadmin is the person whose Telegram id the Panel's
   passport names: `SUPERADMIN_TELEGRAM_ID`, a `param` of `primer.yaml`. The
   API's own description (`/docs`, `/redoc`, `/openapi.json`) is not served.
-- A server's passport (DM-158, the API; its screen -- part B): `GET
+- A server's passport (DM-158): `/servers/:serverId/passport`, from the
+  server's card -- its fields, the rules of those that are not obvious, the
+  secrets by name and state, "apply" with "are you sure?" on `prod`; a
+  secret's value leaves the page with its request. `GET
   /api/v1/servers/{id}/passport` reads it from `primer-ops` with the Panel's
   age key -- the secrets of `asked` and `policies.tls` by name and state,
   never a value; `PUT .../passport/field` and `.../passport/secret` (the
@@ -34,7 +37,10 @@ machine `pridem` installs it from `primer.yaml`.
   queues `update`; it is applied when a green verdict read the server's file
   at the head. `OPS_REPO` is `ssh.github.com:443` or `file://`; the write key
   and the age key are files of the stack (`app/ops/`). A server whose box reads
-  its passport from a file (`state: file`) is not edited here.
+  its passport from a file (`state: file`) is not edited here, nor one
+  primer-ops holds damaged (`state: damaged`: `sops-damaged`, `not-a-file`);
+  "apply" reads primer-ops first and refuses a passport the box would fail
+  on -- absent, damaged, refused by the machine.
 - A new server (DM-157): `/projects/:projectId/servers/new` -- a one-time
   registration token (an hour, the permission `servers`), shown once with the
   command a box registers by (` PRIDEM_REGISTER_TOKEN=<token> pridem register
