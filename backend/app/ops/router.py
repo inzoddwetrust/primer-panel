@@ -22,8 +22,10 @@
 - **An edit** is one commit under the Panel's lock of ``primer-ops`` (a
   Postgres advisory lock: one operation on the clone at a time); its message
   names the server, the version, the path -- never a value -- and the person
-  in the trailer ``Edited-By: <user id>``. ``server.name`` and ``server.role``
-  are no fields (``FIXED``); the result must pass the pinned machine's loader,
+  in the trailer ``Edited-By: <user id>``. ``server.name``, ``server.role``,
+  ``version`` and the secrets are not the field route's, by their path, one
+  under it or one above it (``UNTOUCHABLE``, DM-211); the result must pass the
+  pinned machine's loader,
   or the edit is refused 422 with its findings. It carries
   ``base``, the commit the person read: when the server's file differs at the
   head from what it was at ``base``, the edit is refused 409 -- no merge. A
@@ -40,6 +42,13 @@
   newest green verified verdict whose ``fetch_passport`` read ``primer-ops``
   read the server's file as it is at the head: the same blob at its
   ``ops_commit`` (contract 2, the step's fact).
+- **The database over primer-ops** (DM-211): a route lets its transaction go
+  before it waits for the lock -- no connection of the pool and no lock of the
+  project's row is held while ``git``, ``ssh`` or ``sops`` run -- and takes
+  the project again (``write_scope``, locked, read anew) in the transaction
+  that writes: an edit before its push, "apply" where it queues. The lock is
+  waited for ``OPS_WAIT_S`` at most: ``primer-ops is busy`` (503). A refusal of
+  ``git`` answers 503 with the class of its cause, never what it said.
 - No answer, log line or audit row carries a secret's value.
 """
 
@@ -54,10 +63,11 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.access.actions import Action, permission_for
 from app.access.permissions import Permission
-from app.access.rules import ServerRead, ServerScope, ServerWrite
+from app.access.rules import ServerRead, ServerScope, ServerWrite, write_scope
 from app.agent.models import Verdict
 from app.agent.people import CommandIn, CommandOut, enqueue
 from app.audit.models import ActorKind
@@ -74,6 +84,7 @@ from app.ops.passport import (
     edited,
     is_secret,
     passport_path,
+    touches,
     view,
 )
 from app.ops.repo import Found, NotAFileError, OpsRepo
@@ -90,6 +101,11 @@ CoreOf = Annotated[Core, Depends(get_core)]
 
 LOCK_KEY = 158_001
 """The Postgres advisory lock of the Panel's clone of ``primer-ops``."""
+TRY_LOCK = text("SELECT pg_try_advisory_lock(:k)")
+UNLOCK = text("SELECT pg_advisory_unlock(:k)")
+OPS_WAIT_S = 10.0
+"""How long a request waits for the lock of ``primer-ops`` (DM-211)."""
+OPS_POLL_S = 0.2
 
 PUSH_TRIES = 3
 FILE = (
@@ -111,11 +127,21 @@ UNAPPLIABLE = {
 """What "apply" refuses before the queue: the box's ``update`` would fail on
 it anyway (the dispatcher's word on DM-158 B). ``not-recipient`` is not here:
 the box's key may open what the Panel's does not."""
-FIXED = {("server", "name"): NAME, ("server", "role"): ROLE}
-"""Fields no edit reaches, by its own path or by one above it (the
-dispatcher's word on DM-158 A): the name the box reads its passport by, and
-the role that decides the permission of a deploy -- a ``passport`` that made
-``prod`` a ``test`` would deploy it with ``deploy_test``."""
+BY_ITS_ROUTE = "a secret is set by /passport/secret"
+VERSION = "the version is the Panel's to raise"
+UNTOUCHABLE: dict[tuple[str, ...], str] = {
+    ("asked",): BY_ITS_ROUTE,
+    ("policies", "tls"): BY_ITS_ROUTE,
+    ("server", "name"): NAME,
+    ("server", "role"): ROLE,
+    ("version",): VERSION,
+}
+"""What the route of a field never reaches -- by the path itself, one under
+it or one above it (``touches``; changed by DM-211: ``["policies"]`` would
+replace ``policies.tls`` whole, ``["server", "role", "x"]`` would make the role
+a mapping): the secrets go by their own route; the name the box reads its
+passport by and the role that decides the permission of a deploy are the
+owner's (DM-158 A); the version is the Panel's to raise."""
 COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
@@ -170,27 +196,66 @@ class EditOut(BaseModel):
 
 @asynccontextmanager
 async def ops_lock(core: Core) -> AsyncIterator[None]:
-    """One operation on the clone at a time, in every process of the Panel;
-    its own connection, outside any transaction."""
+    """One operation on the clone at a time, in every process of the Panel
+    (changed by DM-211): the lock is tried on a short connection of its own,
+    again every ``OPS_POLL_S`` until ``OPS_WAIT_S`` -- a request that waits
+    holds no connection of the pool -- then ``primer-ops is busy`` (503, the
+    log line ``ops.busy``). The connection that took it holds it to the end;
+    the unlock is shielded from a cancellation, and a connection whose unlock
+    failed is invalidated: Postgres frees the lock of a session that ends, so
+    it never goes back to the pool held."""
     engine = core.engine.execution_options(isolation_level="AUTOCOMMIT")
-    async with engine.connect() as connection:
-        await connection.execute(text("SELECT pg_advisory_lock(:k)"), {"k": LOCK_KEY})
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + OPS_WAIT_S
+    while True:
+        connection = await engine.connect()
         try:
-            yield
-        finally:
-            await connection.execute(
-                text("SELECT pg_advisory_unlock(:k)"), {"k": LOCK_KEY}
+            got = await connection.scalar(TRY_LOCK, {"k": LOCK_KEY})
+        except BaseException:
+            await asyncio.shield(connection.close())
+            raise
+        if got:
+            break
+        await connection.close()
+        if loop.time() >= deadline:
+            logger.warning(
+                "primer-ops is busy",
+                extra={"event": "ops.busy", "ctx": {"waited_s": OPS_WAIT_S}},
             )
+            raise PanelError(ErrorClass.UNAVAILABLE, "primer-ops is busy")
+        await asyncio.sleep(OPS_POLL_S)
+    try:
+        yield
+    finally:
+        await asyncio.shield(_unlock(connection))
+
+
+async def _unlock(connection: AsyncConnection) -> None:
+    try:
+        await connection.execute(UNLOCK, {"k": LOCK_KEY})
+    except Exception:
+        await connection.invalidate()
+    await connection.close()
 
 
 def _unreachable(error: Exception) -> PanelError:
-    what = error.what if isinstance(error, OpsCommandError) else type(error).__name__
-    code = error.code if isinstance(error, OpsCommandError) else None
+    """503 with the class of the cause -- never a line of what ``git``,
+    ``ssh`` or ``sops`` said (DM-211); a fault of the container itself (a
+    full ``/tmp``, a key file missing) is ``other``."""
+    if isinstance(error, OpsCommandError):
+        what, code, reason = error.what, error.code, error.reason
+    else:
+        what, code, reason = type(error).__name__, None, "other"
     logger.warning(
         "primer-ops cannot be reached",
-        extra={"event": "ops.unreachable", "ctx": {"what": what, "code": code}},
+        extra={
+            "event": "ops.unreachable",
+            "ctx": {"what": what, "code": code, "reason": reason},
+        },
     )
-    return PanelError(ErrorClass.UNAVAILABLE, "primer-ops cannot be reached now")
+    return PanelError(
+        ErrorClass.UNAVAILABLE, f"primer-ops cannot be reached now ({reason})"
+    )
 
 
 async def _facts(found: ServerScope, wanted: dict[str, object]) -> dict[str, object]:
@@ -225,21 +290,35 @@ async def _panel_key(repo: OpsRepo) -> str:
     return age_public_key(await asyncio.to_thread(repo.places.age_key.read_text))
 
 
+async def _again(found: ServerScope, action: Action) -> ServerScope:
+    """The scope taken again after a let-go transaction (DM-211): the project
+    read anew and locked -- archived, the server gone or the permission taken
+    meanwhile is refused here, in the transaction that writes."""
+    again = await write_scope(found.scope.session, found.scope.actor, found.server.id)
+    _needs_passport(again, action)
+    return again
+
+
 def _needs_passport(found: ServerScope, action: Action) -> None:
     needed = permission_for(action, ServerRole(found.server.role))
     if needed is not None and needed not in found.scope.permissions:
         raise PanelError(ErrorClass.FORBIDDEN, f"The permission {needed} is needed")
 
 
-async def _applied(found: ServerScope, repo: OpsRepo, head: Found) -> dict[str, object]:
-    fact = await _facts(
+async def _applied_fact(found: ServerScope) -> dict[str, object]:
+    return await _facts(
         found,
         {"result": "green", "steps": [{"verify": {"source": "ops"}}]},
     )
+
+
+async def _applied(
+    fact: dict[str, object], server: str, repo: OpsRepo, head: Found
+) -> dict[str, object]:
     commit = fact.get("ops_commit")
     if not isinstance(commit, str):
         return {"commit": None, "state": "unknown"}
-    path = passport_path(found.server.name)
+    path = passport_path(server)
     at = await repo.file(commit, path) if await repo.known(commit) else None
     same = at is not None and at.blob == head.blob
     return {"commit": commit, "state": "applied" if same else "pending"}
@@ -269,7 +348,7 @@ async def _seen(repo: OpsRepo, server: str) -> Seen:
     if current is None:
         return Seen("absent", head)
     try:
-        plain = checked(repo.places, await decrypted(repo.places, current.content))
+        plain = checked(await decrypted(repo.places, current.content))
     except NotRecipientError:
         return Seen("not-recipient", head, current)
     except DamagedError:
@@ -282,17 +361,21 @@ async def _seen(repo: OpsRepo, server: str) -> Seen:
 async def read_passport(found: Reading, core: CoreOf) -> dict[str, object]:
     if await _is_file(found):
         return {"state": "file"}
+    fact = await _applied_fact(found)
+    server = found.server.name
+    # no connection held over primer-ops; a rollback expires what it loaded
+    await found.scope.session.rollback()
     repo = core.ops
     try:
         async with ops_lock(core):
             panel_key = await _panel_key(repo)
-            seen = await _seen(repo, found.server.name)
+            seen = await _seen(repo, server)
             if seen.plain is None or seen.current is None:
                 answer: dict[str, object] = {"state": seen.state}
                 if seen.reason is not None:
                     answer.update(reason=seen.reason, base=seen.head)
                 return {**answer, "panel_key": panel_key}
-            applied = await _applied(found, repo, seen.current)
+            applied = await _applied(fact, server, repo, seen.current)
     except (OpsCommandError, OSError) as error:
         raise _unreachable(error) from error
     return {
@@ -316,6 +399,8 @@ async def _edit(
     _needs_passport(found, Action.PASSPORT_EDIT)
     if await _is_file(found):
         raise PanelError(ErrorClass.CONFLICT, FILE)
+    session = found.scope.session
+    await session.commit()  # the project's row and the connection let go
     repo = core.ops
     server = found.server.name
     where = passport_path(server)
@@ -328,7 +413,7 @@ async def _edit(
             read = await repo.file(base, where) if await repo.known(base) else None
             if read is None or read.blob != current.blob:
                 raise PanelError(ErrorClass.CONFLICT, CHANGED.format(base=base))
-            before = checked(repo.places, await decrypted(repo.places, current.content))
+            before = checked(await decrypted(repo.places, current.content))
             version = before.version()
             if version is None:
                 raise PanelError(
@@ -339,12 +424,16 @@ async def _edit(
                 current.content,
                 [(path, value), (("version",), version + 1)],
             )
-            after = checked(repo.places, await decrypted(repo.places, content))
+            after = checked(await decrypted(repo.places, content))
             if after.problems:
                 raise PanelError(
                     ErrorClass.INVALID,
                     f"the passport is refused: {'; '.join(after.problems)}",
                 )
+            # taken again before the push: archived, gone or without the
+            # permission now -- refused while primer-ops is still as it was
+            found = await _again(found, Action.PASSPORT_EDIT)
+            await session.commit()
             what = "secret" if is_secret(path) else "field"
             message = (
                 f"passport {server}: v{version + 1}, {what} {'.'.join(path)}\n"
@@ -390,12 +479,8 @@ async def _edit(
 @router.put("/field")
 async def edit_field(body: FieldIn, found: Writing, core: CoreOf) -> EditOut:
     path = tuple(body.path)
-    if is_secret(path):
-        raise PanelError(ErrorClass.INVALID, "a secret is set by /passport/secret")
-    if path == ("version",):
-        raise PanelError(ErrorClass.INVALID, "the version is the Panel's to raise")
-    for fixed, why in FIXED.items():
-        if fixed[: len(path)] == path:
+    for root, why in UNTOUCHABLE.items():
+        if touches(path, root):
             raise PanelError(ErrorClass.INVALID, why)
     return await _edit(found, core, body.base, path, body.value)
 
@@ -410,6 +495,7 @@ async def apply_passport(body: ApplyIn, found: Writing, core: CoreOf) -> Command
     _needs_passport(found, Action.PASSPORT_APPLY)
     if await _is_file(found):
         raise PanelError(ErrorClass.CONFLICT, FILE)
+    await found.scope.session.commit()  # no lock of the project over primer-ops
     try:
         async with ops_lock(core):
             seen = await _seen(core.ops, found.server.name)
@@ -418,6 +504,7 @@ async def apply_passport(body: ApplyIn, found: Writing, core: CoreOf) -> Command
     if seen.state in UNAPPLIABLE:
         why = UNAPPLIABLE[seen.state].format(reason=seen.reason)
         raise PanelError(ErrorClass.CONFLICT, why)
+    found = await _again(found, Action.PASSPORT_APPLY)
     command = await enqueue(
         found,
         CommandIn(verb="update", args={}, confirmed=body.confirmed),

@@ -93,7 +93,12 @@ async def _scope(
     lock: bool,
 ) -> Scope:
     query = select(Project).where(Project.id == project_id)
-    project = await session.scalar(query.with_for_update() if lock else query)
+    if lock:
+        # a locked read reads the row as it is now, not as the session loaded
+        # it before: a route that let its transaction go takes it again
+        # (``write_scope``, DM-211)
+        query = query.with_for_update().execution_options(populate_existing=True)
+    project = await session.scalar(query)
     if project is None:
         raise PanelError(ErrorClass.NOT_FOUND, NOT_FOUND)
     if actor.is_superadmin:
@@ -180,7 +185,7 @@ class ServerScope:
 async def _server_scope(
     session: AsyncSession, actor: Actor, server_id: uuid.UUID, *, lock: bool
 ) -> ServerScope:
-    server = await session.get(Server, server_id)
+    server = await session.get(Server, server_id, populate_existing=lock)
     if server is None or server.detached_at is not None:
         raise PanelError(ErrorClass.NOT_FOUND, NOT_FOUND)
     scope = await _scope(session, actor, server.project_id, lock=lock)
@@ -210,7 +215,17 @@ class ServerWrite(Rule):
         actor: Annotated[Actor, Depends(current_actor)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
     ) -> ServerScope:
-        found = await _server_scope(session, actor, server_id, lock=True)
-        if found.scope.project.archived_at is not None:
-            raise PanelError(ErrorClass.CONFLICT, "The project is archived")
-        return found
+        return await write_scope(session, actor, server_id)
+
+
+async def write_scope(
+    session: AsyncSession, actor: Actor, server_id: uuid.UUID
+) -> ServerScope:
+    """The scope of ``ServerWrite``, in the session's transaction: a route
+    that let its first transaction go (a long operation outside the database,
+    DM-211) takes it again before it writes -- the project read anew and
+    locked, archived or gone refused as by the rule."""
+    found = await _server_scope(session, actor, server_id, lock=True)
+    if found.scope.project.archived_at is not None:
+        raise PanelError(ErrorClass.CONFLICT, "The project is archived")
+    return found

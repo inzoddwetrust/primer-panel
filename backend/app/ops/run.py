@@ -2,18 +2,83 @@
 ``primer-ops``, nothing else.
 
 A command runs with the environment it is given and no other, in a process
-group of its own: a timeout kills the group (``git`` starts ``ssh``). An exit
-code outside ``expect`` is ``OpsCommandError`` -- never quiet. What a failure
-carries is what ran (``git fetch``) and the code: its output is not read
-into an error or a log line, so neither a path to a key nor anything a tool
-echoes leaves the process.
+group of its own (``git`` starts ``ssh``, ``ssh`` its ``ProxyCommand``). An
+exit code outside ``expect`` is ``OpsCommandError`` -- never quiet.
+
+- **A timeout or a cancellation** (the client went away) kills the group and
+  waits for the leader; a group already gone is no error -- the command ended
+  between the timeout and the kill (``ProcessLookupError``, DM-211). A
+  cancellation goes on up; a timeout is ``timed out`` with the reason
+  ``timeout``: what held it is not known. A command that ends by itself is not
+  killed after: its pid may be another's by then.
+- **What a failure carries** is what ran (``git fetch``), the code and the
+  class of the cause read from stderr (``reason_of``: ``REASONS``) -- never a
+  line of it: neither a path to a key nor anything a tool echoes leaves the
+  process. On DM-160 the class is the one diagnosis of the access to
+  ``primer-ops``.
 """
 
 import asyncio
 import os
 import signal
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
+
+REASONS = ("host-key", "publickey", "dns", "network", "timeout", "other")
+"""The classes of a refusal of ``git``, ``ssh`` or ``sops`` (DM-211)."""
+
+SIGNS: tuple[tuple[str, tuple[bytes, ...]], ...] = (
+    (
+        "host-key",
+        (
+            b"Host key verification failed",
+            b"REMOTE HOST IDENTIFICATION HAS CHANGED",
+            b"host key is known for",
+        ),
+    ),
+    (
+        "publickey",
+        (
+            b"Permission denied (publickey",
+            b"Repository not found",
+            b"Load key",
+            b"The key you are authenticating with has been marked as read only",
+        ),
+    ),
+    (
+        "dns",
+        (
+            b"Could not resolve hostname",
+            b"Name or service not known",
+            b"Temporary failure in name resolution",
+        ),
+    ),
+    (
+        "network",
+        (
+            b"Connection refused",
+            b"Connection timed out",
+            b"Network is unreachable",
+            b"No route to host",
+            b"Connection reset",
+            b"Connection closed by",
+            b"kex_exchange_identification",
+            b"connect: ",
+        ),
+    ),
+)
+"""What OpenSSH, ``git`` and ``app.ops.connect`` say of each class, in the
+order they are asked: a failed name ends in a closed connection too, so
+``dns`` is asked before ``network``."""
+
+
+def reason_of(stderr: bytes) -> str:
+    """The class of a refusal by what the tool said; ``other`` -- none."""
+    for reason, signs in SIGNS:
+        if any(sign in stderr for sign in signs):
+            return reason
+    return "other"
 
 
 @dataclass(frozen=True)
@@ -25,11 +90,12 @@ class Ran:
 class OpsCommandError(Exception):
     """A command of ``git`` or ``sops`` that ended otherwise than expected."""
 
-    def __init__(self, what: str, code: int | None) -> None:
+    def __init__(self, what: str, code: int | None, reason: str) -> None:
         said = "timed out" if code is None else f"exit code {code}"
-        super().__init__(f"{what}: {said}")
+        super().__init__(f"{what}: {said} ({reason})")
         self.what = what
         self.code = code
+        self.reason = reason
 
 
 async def run(
@@ -52,12 +118,22 @@ async def run(
         start_new_session=True,
     )
     try:
-        out, _ = await asyncio.wait_for(process.communicate(stdin), timeout_s)
+        out, err = await asyncio.wait_for(process.communicate(stdin), timeout_s)
     except TimeoutError:
-        os.killpg(process.pid, signal.SIGKILL)
-        await process.wait()
-        raise OpsCommandError(what, None) from None
+        await asyncio.shield(_end(process))
+        raise OpsCommandError(what, None, "timeout") from None
+    except asyncio.CancelledError:
+        await asyncio.shield(_end(process))
+        raise
     code = process.returncode
     if code is None or code not in expect:
-        raise OpsCommandError(what, code)
+        raise OpsCommandError(what, code, reason_of(err))
     return Ran(code, out)
+
+
+async def _end(process: asyncio.subprocess.Process) -> None:
+    """The group killed, the leader waited for; a group already gone is no
+    error (the leader was reaped as it ended)."""
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGKILL)
+    await process.wait()

@@ -1,5 +1,9 @@
 """A passport of ``primer-ops`` as the Panel reads and edits it (DM-158).
 
+- **Nothing decrypted on a disk** (DM-211): ``scratch`` holds the encrypted
+  file only -- what ``sops`` reads and what ``sops set`` writes; a value comes
+  to ``sops`` on stdin; the decryption is ``sops``' stdout, and the machine's
+  loader reads it from a ``memfd``.
 - **Reading** -- ``sops --decrypt`` with the Panel's age key; the Panel is a
   recipient of every passport it edits (TZ 0.7.41 O). A file the key does not
   open is ``NotRecipientError``; a file that is not sops' is ``DamagedError`` (the
@@ -40,6 +44,13 @@ NOT_RECIPIENT = 128
 DAMAGED = (1, 25)
 SECRET_ROOTS = (("asked",), ("policies", "tls"))
 """The subtrees whose leaves are secrets (contract 1 rules 5 and 12)."""
+
+
+def touches(path: tuple[str, ...], root: tuple[str, ...]) -> bool:
+    """``path`` is ``root``, under it or above it: a value set there reaches
+    ``root`` (a path above it replaces the whole subtree, DM-211)."""
+    return path[: len(root)] == root or root[: len(path)] == path
+
 
 RULES: dict[tuple[str, ...], str] = {
     ("policies", "gc", "keep_releases"): "keep_releases",
@@ -145,9 +156,25 @@ def _problems(error: ContractError) -> list[str]:
     return [f"{p.path or '<root>'} [{p.code}]" for p in error.problems]
 
 
-def checked(places: OpsPlaces, text: bytes) -> Plain:
-    """``text`` through the pinned machine's loader."""
-    with _scratch(places, text) as file:
+@contextmanager
+def _in_memory(text: bytes) -> Iterator[Path]:
+    """``text`` as a file with no place on a disk (DM-211): a ``memfd`` the
+    loader reads by ``/proc/self/fd/<n>``, closed after -- it goes with the
+    process, nothing of it is left in ``scratch`` or anywhere."""
+    handle = os.memfd_create("passport", os.MFD_CLOEXEC)
+    try:
+        rest = memoryview(text)
+        while rest:
+            rest = rest[os.write(handle, rest) :]
+        yield Path(f"/proc/self/fd/{handle}")
+    finally:
+        os.close(handle)
+
+
+def checked(text: bytes) -> Plain:
+    """A decrypted passport through the pinned machine's loader, read from
+    memory: the decryption never touches the file system (DM-211)."""
+    with _in_memory(text) as file:
         try:
             data = load_yaml_mapping(file)
         except ContractError as error:
