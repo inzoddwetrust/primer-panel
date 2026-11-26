@@ -1,0 +1,41 @@
+# The Panel's object storage -- the entry `panel-storage` of primer.yaml
+# (DM-203). Its own entry, `persistent: true`: what it keeps survives
+# `destroy` and `reinstall` (contract 3 rule 14). The machine names the
+# project (-p), the volume and the networks; the one value comes through
+# `--env-file`, ${VAR:?} (contract 3 rule 18).
+#
+#   panel-storage  the server, RustFS, the same pinned build as velo's
+#                  `velo-storage`. No port on the host, no route: only the
+#                  consumers of its point `files` reach it, on the network the
+#                  machine makes for each pair (contract 3 additions 1.27) --
+#                  comms, which takes PRODUCT_STORAGE_ADDRESS. Nothing of the
+#                  Panel's own code uses it yet: no job, no service key, no
+#                  bucket until it has a client.
+
+# The LOGIN of the storage's root user is a constant of the product, not a
+# value of an instance (as velo's, owner ruling 4.11 there): the service keys
+# a client will have belong to the root user that made them, and a root user
+# with another login does not see them. Only the root SECRET is minted.
+x-storage-root-login: &root-login panel-storage-root
+
+services:
+  panel-storage:
+    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
+    environment:
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_VOLUMES: /data
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_ACCESS_KEY: *root-login
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?}
+    volumes:
+      - panel_storage_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  panel_storage_data: {}

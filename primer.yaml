@@ -15,6 +15,14 @@ stacks:
     migrate:  python -m alembic upgrade head
     # No `test`: the Panel's unit tests run in its own CI (the owner's
     # decision of 22.11); a box tests nothing of it.
+  panel-storage:                      # the Panel's object storage (DM-203): RustFS
+    compose: docker-compose.storage.yml
+    persistent: true                  # its volume survives destroy and reinstall (rule 14)
+    # Its point: for comms (PRODUCT_STORAGE_ADDRESS) and, once it has a
+    # client, for the Panel's app -- one alias for both (contract 3 1.27).
+    # `scheme` tells the machine what it is, not the address.
+    expose:
+      files: { service: panel-storage, port: 9000, scheme: http }
 
 env:
   POSTGRES_PASSWORD: { source: minted }
@@ -31,6 +39,16 @@ env:
   OPS_REPO:          { source: param }                             # ssh://git@ssh.github.com:443/<owner>/<repo>.git
   OPS_WRITE_KEY:     { source: asked, file: { path: /run/panel/ops-write.key } }
   OPS_AGE_KEY:       { source: asked, file: { path: /run/panel/ops-age.key } }
+  # The storage's root SECRET (DM-203): exactly 40 characters, as velo's --
+  # RustFS takes a secret of 8..40, and a minted value is minted once. Its
+  # login is a constant of docker-compose.storage.yml.
+  RUSTFS_SECRET_KEY: { source: minted, length: 40 }
+
+provides:                             # what the Panel gives the services on its box
+  # The point of its object storage, `<alias>:<port>` -- comms v4.2.0 asks it
+  # of every product whatever the options (its requires; section 15 of its
+  # INTEGRATION.md). The machine's value: panel-storage-panel-storage:9000.
+  PRODUCT_STORAGE_ADDRESS: { stack: panel-storage, endpoint: files }
 
 egress:                               # the way out of the Panel's container (DM-146, DM-158)
   - ssh.github.com                    # git over ssh to primer-ops, port 443

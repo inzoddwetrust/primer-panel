@@ -8,6 +8,12 @@ machine `pridem` installs it from `primer.yaml`.
   edition `core`, the sources of its environment, routes for the frontend and
   the API. It declares no `test`: the Panel's unit tests run in its CI (the
   owner's decision of 22.11), and no dependency, so there is no `primer.lock`.
+- `docker-compose.storage.yml` -- the second entry, `panel-storage` (DM-203):
+  the Panel's object storage, RustFS pinned by digest, `persistent: true`,
+  its root secret minted. No port, no route: its point `files` is for the
+  services that take `PRODUCT_STORAGE_ADDRESS` (comms v4.2.0 asks every
+  product for it), the value `panel-storage-panel-storage:9000`. No code of
+  the Panel uses it yet.
 - `backend/` -- the API. `app/main.py` is the factory
   (`uvicorn --factory app.main:create_app`): it builds the application's state
   -- settings, the database engine and its sessions, the Redis client -- and
