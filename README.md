@@ -20,8 +20,14 @@ machine `pridem` installs it from `primer.yaml`.
   hands it to requests through FastAPI dependencies (`app/core/state.py`);
   nothing is created at import time, and `tests/singletons.py` fences it.
   `app/core/` holds the database sessions, Redis, the one form of errors
-  (`{"error": {"class", "message"}}`), the client's address and rate limits.
-  `primer_report/` serves `/health` (its checks: `db`, `schema`, `redis`) and
+  (`{"error": {"class", "message"}}`), the client's address and rate limits:
+  a minute's count per source (an IPv6 address by its `/64`) on the public
+  routes -- `/auth/telegram/start` and `/auth/telegram/return` 20 each,
+  answered by the sign-in's `#reason=try_later`; `/agent/v1/register` and
+  `/api/v1/invites/accept` 10 each, 429 with `Retry-After` (DM-212). A log
+  line keeps no value of `invite`, `code` or `state` of a URL's query.
+  `primer_report/` serves `/health` (its checks: `db`, `schema`, `redis`; its
+  seams -- `app/seams.py`, held equal to `primer.yaml` by a test) and
   `/ready` and writes JSON logs (TZ section 11).
 - People and access (PRIMER-PANEL-TZ-1 sections 2, 3, 5): `app/projects/`
   (projects of two kinds, servers), `app/access/` (people, memberships with
@@ -122,8 +128,8 @@ machine `pridem` installs it from `primer.yaml`.
   errors; a 401 drops the person and shows the sign-in. Pages: `/login` --
   the button to the API's `/auth/telegram/start` (an invite link
   `/login?invite=<token>` hands its token on) and a refused sign-in from the
-  fragment `#reason=<code>[&telegram_id=<id>]`; `/` -- the person of
-  `/api/v1/me`. The API answers CORS with credentials to the frontend's origin
+  fragment `#reason=<code>[&telegram_id=<id>]`; `/me` -- the person of
+  `/api/v1/me`, and sign-out. The API answers CORS with credentials to the frontend's origin
   alone and refuses a changing request to `/api/v1/` or `/auth/logout` from
   any other origin (`app/core/origin.py`).
 - The page in general: it reads `/config.json`, which its container
@@ -145,4 +151,4 @@ whose name ends with `_test`, and `REDIS_URL` of Redis database 15.
 CI (`.github/workflows/ci.yml`) runs four jobs: backend, frontend, image
 (the probes) and check (`primer.yaml` through the machine's loader,
 `pridem check` of the repository, the pins of the images). The machine is
-release v0.1.8, `PRIDEM_COMMIT` in the workflow.
+release v0.1.10, `PRIDEM_COMMIT` in the workflow.

@@ -13,7 +13,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Path, Request, Response
 from fastapi.responses import JSONResponse
 from pridem.protocol import (
     Command as CommandMessage,
@@ -29,6 +29,7 @@ from pridem.protocol import (
     RegisterResponse,
     VerdictEnvelope,
 )
+from pridem.report.schema import RUN_ID
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -45,6 +46,7 @@ from app.audit.service import record
 from app.config import Settings
 from app.core.database import get_db_session
 from app.core.errors import ErrorClass, PanelError
+from app.core.ratelimit import rate_limit
 from app.core.state import Core, get_core, get_settings
 from app.projects.models import Project, Server
 
@@ -73,7 +75,12 @@ def _moment(value: datetime | None) -> str | None:
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-@router.post("/register", status_code=201)
+@router.post(
+    "/register",
+    status_code=201,
+    # a public route: one-time tokens are tried here (DM-212)
+    dependencies=[Depends(rate_limit("register", limit=10, window_s=60))],
+)
 async def register(
     request: Request,
     _: Anybody,
@@ -212,15 +219,20 @@ async def refuse_command(command_id: uuid.UUID, box: Box) -> Response:
     return Response(status_code=204)
 
 
+RunIdPath = Annotated[str, Path(pattern=f"^{RUN_ID.pattern}$")]
+"""A run id of the pinned machine's form (contract 2): another form is 422,
+not a key too long for its column (DM-212)."""
+
+
 @router.post("/runs/{run_id}/events")
-async def events(run_id: str, box: Box) -> EventsAccepted:
+async def events(run_id: RunIdPath, box: Box) -> EventsAccepted:
     batch = _parsed(EventBatch, box.body)
     last = await runs.keep_events(box.session, box.server.id, run_id, batch)
     return EventsAccepted(last_seq=last)
 
 
 @router.post("/runs/{run_id}/verdict", status_code=204)
-async def verdict(run_id: str, box: Box) -> Response:
+async def verdict(run_id: RunIdPath, box: Box) -> Response:
     envelope = _parsed(VerdictEnvelope, box.body)
     signed = json.loads(box.body)["verdict"]
     await runs.keep_verdict(box.session, box.server, run_id, envelope, signed)

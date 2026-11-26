@@ -42,6 +42,7 @@ from app.fleet.router import router as fleet_router
 from app.ops.repo import OpsPlaces, OpsRepo
 from app.ops.router import router as passport_router
 from app.runs.router import router as runs_router
+from app.seams import PROVIDES, requires_satisfied
 from primer_report import Limits, PrimerReport, Seams
 
 SERVICE = "primer-panel"
@@ -141,8 +142,9 @@ def create_app(
         edition=settings.edition,
         modules=list(EDITIONS[settings.edition]),
         limits=Limits(max_upload_mb=MAX_UPLOAD_MB),
-        # The Panel provides nothing to a service and requires nothing yet.
-        seams=Seams(provides=[], requires_satisfied=True),
+        # What primer.yaml provides and whether the seams it takes have their
+        # values: app/seams.py, held equal to primer.yaml by a test (DM-212)
+        seams=Seams(provides=list(PROVIDES), requires_satisfied=requires_satisfied()),
         db=partial(read_revision, engine),
         head_checks={"schema": at_head(head)},
         checks={REDIS: partial(ping, redis)},

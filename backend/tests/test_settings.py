@@ -83,14 +83,18 @@ def test_an_unknown_or_empty_value_names_its_variable(name: str, value: str) -> 
 
 
 def test_comms_is_connected_with_both_its_values() -> None:
+    """Changed by DM-212: one of the two is a refusal of the start, not a
+    sign-in quietly off -- neither is comms not connected."""
     both = {
         **GOOD,
         "COMMS_API_URL": "http://comms-comms-app:8000",
         "COMMS_SERVICE_TOKEN": "invented-service-token-0001",
     }
     assert Settings.model_validate(both).comms_connected is True
-    one = {**GOOD, "COMMS_API_URL": "http://comms-comms-app:8000"}
-    assert Settings.model_validate(one).comms_connected is False
+    assert Settings.model_validate(GOOD).comms_connected is False
+    for one in ("COMMS_API_URL", "COMMS_SERVICE_TOKEN"):
+        with pytest.raises(ValidationError, match="both or neither"):
+            Settings.model_validate({**GOOD, one: both[one]})
 
 
 @pytest.mark.parametrize("name", sorted(GOOD))

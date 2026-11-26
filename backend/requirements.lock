@@ -673,7 +673,9 @@ opentelemetry-api==1.45.1 \
 packaging==26.3 \
     --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
-    # via pridem
+    # via
+    #   panel-backend (pyproject.toml)
+    #   pridem
 pridem @ https://github.com/inzoddwetrust/primer/releases/download/v0.1.10/pridem-0.1.10-py3-none-any.whl \
     --hash=sha256:300fa81b51577ec2e73f58e7329acaf3b5e820db96ecbd5229154c94d93bc314
     # via panel-backend (pyproject.toml)

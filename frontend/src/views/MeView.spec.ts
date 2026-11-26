@@ -79,4 +79,22 @@ describe('the page of the person', () => {
     expect(store.me).toBeNull()
     expect(router.currentRoute.value.name).toBe('login')
   })
+
+  it('keeps a refused sign-out on the screen (DM-212)', async () => {
+    let calls = 0
+    const fetchFn = vi.fn(async () => {
+      calls += 1
+      if (calls === 1) return new Response(JSON.stringify(ME))
+      return new Response('{"error":{"class":"unavailable","message":"Redis is down"}}', {
+        status: 503,
+      })
+    }) as unknown as typeof fetch
+    const client = createApiClient({ origin: 'https://api.example.com', fetchFn })
+    const { wrapper, router, store } = await page(client)
+    await wrapper.get('[data-test="logout"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="error-class"]').text()).toBe('unavailable')
+    expect(store.me).not.toBeNull()
+    expect(router.currentRoute.value.name).not.toBe('login')
+  })
 })

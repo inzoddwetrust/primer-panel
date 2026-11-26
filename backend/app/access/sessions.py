@@ -29,6 +29,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pydantic import BaseModel, ValidationError
 from redis.asyncio import Redis
 
 SESSION_TTL_S = 7 * 24 * 3600
@@ -42,6 +43,14 @@ _EPOCH = "panel:epoch:"
 class SessionPerson:
     user_id: uuid.UUID
     telegram_id: int
+
+
+class _Stored(BaseModel):
+    """A session as it is kept in Redis; anything else is no session."""
+
+    user_id: uuid.UUID
+    telegram_id: int
+    epoch: int
 
 
 def _session_key(token: str) -> str:
@@ -72,12 +81,14 @@ async def person_of(redis: Redis, token: str) -> SessionPerson | None:
     raw = await redis.get(_session_key(token))
     if raw is None:
         return None
-    value = json.loads(raw)
-    user_id = uuid.UUID(value["user_id"])
-    epoch = await redis.get(_epoch_key(user_id))
-    if int(epoch or 0) != int(value["epoch"]):
+    try:
+        value = _Stored.model_validate_json(raw)
+    except ValidationError:
+        return None  # damaged: no session (DM-212), never a 500
+    epoch = await redis.get(_epoch_key(value.user_id))
+    if int(epoch or 0) != value.epoch:
         return None
-    return SessionPerson(user_id=user_id, telegram_id=int(value["telegram_id"]))
+    return SessionPerson(user_id=value.user_id, telegram_id=value.telegram_id)
 
 
 async def close(redis: Redis, token: str) -> None:

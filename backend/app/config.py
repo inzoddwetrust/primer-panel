@@ -31,7 +31,7 @@ blank's form, no global singletons).
 
 import re
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.editions import EDITIONS
@@ -93,6 +93,16 @@ class Settings(BaseSettings):
         if value is not None and not re.fullmatch(r"https?://[^\s/?#]+/?", value):
             raise ValueError("COMMS_API_URL is the origin of comms' API, http(s)")
         return value
+
+    @model_validator(mode="after")
+    def _comms_whole(self) -> "Settings":
+        """Both seams of comms' sign-in or neither: one alone turned the
+        sign-in off without a word (DM-212)."""
+        if (self.comms_api_url is None) != (self.comms_service_token is None):
+            raise ValueError(
+                "COMMS_API_URL and COMMS_SERVICE_TOKEN go together: both or neither"
+            )
+        return self
 
     @property
     def frontend_origin(self) -> str:

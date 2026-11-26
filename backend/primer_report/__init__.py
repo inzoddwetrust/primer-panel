@@ -29,9 +29,12 @@ from primer_report.logs import (
     LOG_CTX,
     LOG_FIELDS,
     REQUEST_ID,
+    SECRET_QUERY,
     JsonFormatter,
+    QueryRedactor,
     RequestIdMiddleware,
     configure_logging,
+    redact_query,
 )
 
 __all__ = [
@@ -42,13 +45,16 @@ __all__ = [
     "LOG_CTX",
     "LOG_FIELDS",
     "REQUEST_ID",
+    "SECRET_QUERY",
     "Health",
     "JsonFormatter",
     "Limits",
     "PrimerReport",
+    "QueryRedactor",
     "Ready",
     "RequestIdMiddleware",
     "Seams",
     "configure_logging",
     "free_size",
+    "redact_query",
 ]

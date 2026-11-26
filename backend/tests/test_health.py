@@ -80,6 +80,11 @@ def test_probe_DM_26_health_matches_schema_11(
     Changed by DM-148: the stack is the Panel, ``name: primer-panel``; it has
     Redis, so ``checks`` has ``redis``; it has no service, so ``seams`` is
     empty and satisfied.
+
+    Changed by DM-212, by the dispatcher's word: the Panel provides
+    PRODUCT_STORAGE_ADDRESS (DM-203); ``/health`` says it, held equal to
+    ``primer.yaml`` by a test -- without it the machine's ``seams_verify``
+    would answer ``provide-not-live`` on DM-160 (the owner's decision of 26.11).
     """
     client: TestClient = request.getfixturevalue(state)
     response = client.get("/health")
@@ -99,7 +104,10 @@ def test_probe_DM_26_health_matches_schema_11(
     assert body["commit"] == COMMIT
     assert type(body["uptime_s"]) is int
     assert body["uptime_s"] >= 0
-    assert body["seams"] == {"provides": [], "requires_satisfied": True}
+    assert body["seams"] == {
+        "provides": ["PRODUCT_STORAGE_ADDRESS"],
+        "requires_satisfied": True,
+    }
     assert body["limits"] == {"max_upload_mb": MAX_UPLOAD_MB}
     assert body["edition"] == "core"
     assert body["modules"] == []

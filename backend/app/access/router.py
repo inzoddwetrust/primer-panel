@@ -46,6 +46,7 @@ from app.access.schemas import (
 from app.audit.models import Audit
 from app.config import Settings
 from app.core.database import get_db_reader, get_db_session
+from app.core.ratelimit import rate_limit
 from app.core.state import get_redis, get_settings
 from app.projects.models import Project
 
@@ -214,7 +215,12 @@ async def revoke_invite(invite_id: uuid.UUID, scope: PeopleWrites) -> InviteOut:
     return InviteOut.model_validate(await service.revoke_invite(scope, invite_id))
 
 
-@router.post("/invites/accept", status_code=201)
+@router.post(
+    "/invites/accept",
+    status_code=201,
+    # a public route: tokens are tried here (DM-212)
+    dependencies=[Depends(rate_limit("invite-accept", limit=10, window_s=60))],
+)
 async def accept_invite(body: AcceptIn, actor: AsAnyone, session: Writer) -> ProjectOut:
     membership = await service.accept_invite(session, actor, body.token)
     project = await session.get(Project, membership.project_id)

@@ -15,6 +15,12 @@ written whole: over 8 KB the deploy machine cuts it, not the stack.
 The formatter is named in a dictConfig file by ``"()"``, with ``service`` as
 its argument; the release comes from ``PRIMER_RELEASE``, which the image
 carries (contract 3 rule 19). Without it the formatter refuses to start.
+
+A query of a URL keeps no value of ``SECRET_QUERY`` (DM-212): the line of the
+access log names the path with its query -- ``?invite=<token>``,
+``?code=...&state=...`` of the sign-in. ``redact_query`` hides them, in every
+line the formatter writes and, by ``QueryRedactor`` on the logger
+``uvicorn.access``, in the record itself before any handler sees it.
 """
 
 import json
@@ -41,6 +47,29 @@ REQUEST_ID_HEADER = "x-request-id"
 # request, so anything that could break or forge a line is replaced.
 _REQUEST_ID_FORM = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
+SECRET_QUERY = ("invite", "code", "state")
+"""Parameters of a query whose value never reaches a log line (DM-212)."""
+_SECRET_QUERY = re.compile(r"(?<=[?&])(" + "|".join(SECRET_QUERY) + r")=[^&\s\"'#]*")
+
+
+def redact_query(text: str) -> str:
+    """``text`` with the value of each ``SECRET_QUERY`` of a URL's query
+    hidden: ``invite=<hidden>``."""
+    return _SECRET_QUERY.sub(r"\1=<hidden>", text)
+
+
+class QueryRedactor(logging.Filter):
+    """The record's message, its query values of ``SECRET_QUERY`` hidden --
+    for a logger whose lines name URLs (``uvicorn.access``): every handler,
+    the test's ``caplog`` too, gets the record already redacted."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        hidden = redact_query(message)
+        if hidden != message:
+            record.msg, record.args = hidden, None
+        return True
+
 
 class JsonFormatter(logging.Formatter):
     """One JSON object per record: ``LOG_FIELDS``, then ``LOG_CTX`` if given."""
@@ -58,7 +87,7 @@ class JsonFormatter(logging.Formatter):
         self._release = release
 
     def format(self, record: logging.LogRecord) -> str:
-        msg = record.getMessage()
+        msg = redact_query(record.getMessage())
         if record.exc_info:
             msg = f"{msg}\n{self.formatException(record.exc_info)}"
         if record.stack_info:

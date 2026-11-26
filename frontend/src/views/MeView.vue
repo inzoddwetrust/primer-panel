@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ApiError, ApiNetworkError, useApi } from '../api/client'
+import ApiErrorNote from '../components/ApiErrorNote.vue'
 import { useMeStore } from '../stores/me'
 
 const { t } = useI18n()
@@ -11,8 +13,18 @@ const router = useRouter()
 const store = useMeStore()
 const { me, error } = storeToRefs(store)
 
+// A refused sign-out stays on the screen: the person is still signed in,
+// the store is kept and the page stays (DM-212).
+const logoutError = ref<unknown>(null)
+
 async function logout(): Promise<void> {
-  await api.post('/auth/logout')
+  logoutError.value = null
+  try {
+    await api.post('/auth/logout')
+  } catch (failure: unknown) {
+    logoutError.value = failure
+    return
+  }
   store.clear()
   await router.replace({ name: 'login' })
 }
@@ -51,6 +63,7 @@ async function logout(): Promise<void> {
         {{ t('me.projects_link') }}
       </RouterLink>
       <button type="button" data-test="logout" @click="logout">{{ t('me.logout') }}</button>
+      <ApiErrorNote v-if="logoutError" :error="logoutError" />
     </section>
     <p v-else>{{ t('me.loading') }}</p>
   </main>

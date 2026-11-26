@@ -42,6 +42,7 @@ from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import exists, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.access import sessions
@@ -62,6 +63,7 @@ from app.audit.service import record
 from app.config import Settings
 from app.core.database import get_db_session
 from app.core.errors import ErrorClass, PanelError
+from app.core.ratelimit import counted
 from app.core.state import get_comms, get_redis, get_settings
 
 logger = logging.getLogger(__name__)
@@ -107,6 +109,11 @@ to the person as comms not connected (changed by DM-161)."""
 Settings_ = Annotated[Settings, Depends(get_settings)]
 Comms = Annotated[CommsClient | None, Depends(get_comms)]
 RedisClient = Annotated[Redis, Depends(get_redis)]
+
+LOGIN_LIMIT = 20
+LOGIN_WINDOW_S = 60
+"""A minute's sign-ins of one source, each of the two routes its own count
+(DM-212)."""
 Writer = Annotated[AsyncSession, Depends(get_db_session)]
 Anybody = Annotated[None, Depends(Public())]
 
@@ -142,10 +149,31 @@ def refused(
     return response
 
 
+async def _limited(request: Request, redis: Redis, bucket: str) -> bool:
+    """The source is past the sign-in's limit, or the limit cannot be counted
+    (DM-212): the person reads ``try_later`` on the page of sign-in -- these
+    are navigations of a browser, not calls of the API, and a bare 429 would
+    be a page of JSON."""
+    try:
+        wait = await counted(
+            request, redis, bucket, limit=LOGIN_LIMIT, window_s=LOGIN_WINDOW_S
+        )
+    except PanelError:
+        return True
+    return wait is not None
+
+
 @router.get("/telegram/start")
 async def start(
-    _: Anybody, settings: Settings_, comms: Comms, invite: str | None = None
+    request: Request,
+    _: Anybody,
+    settings: Settings_,
+    comms: Comms,
+    redis: RedisClient,
+    invite: str | None = None,
 ) -> RedirectResponse:
+    if await _limited(request, redis, "login-start"):
+        return refused(settings, LoginRefusal.TRY_LATER)
     if comms is None:
         logger.warning(
             "sign-in asked, comms is not connected",
@@ -190,12 +218,21 @@ def _comms_refused(settings: Settings, error_class: str) -> RedirectResponse:
 async def _person(session: AsyncSession, result: LoginResult) -> User:
     """The account of the person comms vouched for, made or updated."""
     person = result.telegram
-    user = await session.scalar(
-        select(User).where(User.telegram_id == person.id).with_for_update()
+    # Two first sign-ins of one id at once: the second insert yields to the
+    # first, both then read the one row (DM-212) -- not an IntegrityError.
+    await session.execute(
+        insert(User)
+        .values(id=uuid.uuid4(), telegram_id=person.id)
+        .on_conflict_do_nothing(index_elements=[User.telegram_id])
     )
-    if user is None:
-        user = User(telegram_id=person.id)
-        session.add(user)
+    user = (
+        await session.execute(
+            select(User)
+            .where(User.telegram_id == person.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     user.first_name = person.first_name
     user.username = person.username
     user.bot_access_granted = person.bot_access_granted
@@ -253,6 +290,8 @@ async def finish(
     session: Writer,
     redis: RedisClient,
 ) -> RedirectResponse:
+    if await _limited(request, redis, "login-return"):
+        return refused(settings, LoginRefusal.TRY_LATER)
     given = request.query_params.get("state", "")
     code = request.query_params.get("code", "")
     kept = request.cookies.get(LOGIN_COOKIE, "")

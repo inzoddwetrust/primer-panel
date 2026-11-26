@@ -4,6 +4,9 @@
   "formatters": {
     "json": {"()": "primer_report.JsonFormatter", "service": "primer-panel"}
   },
+  "filters": {
+    "query": {"()": "primer_report.QueryRedactor"}
+  },
   "handlers": {
     "stdout": {
       "class": "logging.StreamHandler",
@@ -14,7 +17,7 @@
   "loggers": {
     "uvicorn": {"handlers": ["stdout"], "level": "INFO", "propagate": false},
     "uvicorn.error": {"handlers": [], "level": "INFO", "propagate": true},
-    "uvicorn.access": {"handlers": ["stdout"], "level": "INFO", "propagate": false}
+    "uvicorn.access": {"handlers": ["stdout"], "level": "INFO", "propagate": false, "filters": ["query"]}
   },
   "root": {"handlers": ["stdout"], "level": "INFO"}
 }
