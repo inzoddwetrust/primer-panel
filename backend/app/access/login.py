@@ -11,7 +11,7 @@ The browser's navigations, on the API's host:
 2. ``GET /auth/telegram/return?code&state`` -- the ``state`` of the address is
    compared with the cookie's BEFORE comms is called; no cookie or another
    ``state`` -- refused, comms is not called (the binding of the attempt to
-   the browser is the Panel's, the form of comms, step 6). Then comms'
+   the browser is the Panel's, comms' section 16, step 6). Then comms'
    ``complete``; then the Panel decides by ``telegram.id`` (``decide``) and
    makes the session.
 3. ``POST /auth/logout`` -- the request's session is closed.
@@ -98,8 +98,11 @@ COMMS_REFUSAL: dict[str, LoginRefusal] = {
     "id_token_invalid": LoginRefusal.REFUSED,
     "validation": LoginRefusal.DEFECT,
     "unauthorized": LoginRefusal.DEFECT,
+    "not_found": LoginRefusal.UNAVAILABLE,
 }
-"""Each class of refusal of comms (the form, section 6) and the Panel's answer."""
+"""Each class of refusal of comms (``v4.2.0``, sections 5 and 16) and the
+Panel's answer. ``not_found`` -- comms' option ``login`` is off (section 3a):
+to the person as comms not connected (changed by DM-161)."""
 
 Settings_ = Annotated[Settings, Depends(get_settings)]
 Comms = Annotated[CommsClient | None, Depends(get_comms)]
@@ -170,6 +173,12 @@ async def start(
 
 def _comms_refused(settings: Settings, error_class: str) -> RedirectResponse:
     reason = COMMS_REFUSAL[error_class]
+    if error_class == "not_found":
+        logger.warning(
+            "comms answers not_found: its option login is off, "
+            "or the address is not comms'",
+            extra={"event": "login.comms_login_off"},
+        )
     if reason is LoginRefusal.DEFECT:
         logger.error(
             "comms refused the Panel itself",

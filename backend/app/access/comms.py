@@ -3,8 +3,10 @@
 comms vouches for who came (Telegram OpenID Connect with PKCE, its own
 attempt of ten minutes); everything else -- sessions, invites, refusing a
 stranger, permissions -- is the Panel's (the owner's decision of 24.11). The
-form is comms' "form of the sign-in module" (24.11, order 3): two calls on
-``COMMS_API_URL`` with ``Authorization: Bearer <COMMS_SERVICE_TOKEN>``.
+contract is comms' ``deploy/INTEGRATION.md`` of ``v4.2.0`` (changed by
+DM-161): section 16, the sign-in -- two calls on ``COMMS_API_URL`` with
+``Authorization: Bearer <COMMS_SERVICE_TOKEN>``; section 5, the one form of
+refusal and its classes; section 3a, the option ``login``.
 
 - ``start`` -- ``{provider: telegram, redirect_uri, bot_access: true}`` ->
   ``{state, authorize_url, expires_at}``;
@@ -14,16 +16,19 @@ form is comms' "form of the sign-in module" (24.11, order 3): two calls on
 
 A refusal is ``{"error": {"class", "message"}}``; the Panel reads the class,
 never the message. Three outcomes besides the answer, each its exception:
-``CommsRefusedError`` (a class of the form), ``CommsUnreachableError`` (timeout, no
-connection) and ``CommsOffFormError`` (an answer the form does not describe).
+``CommsRefusedError`` (a class of the contract), ``CommsUnreachableError``
+(timeout, no connection) and ``CommsOffFormError`` (an answer the contract
+does not describe).
 
 Fields comms may add in a minor version are ignored; the fields the Panel
-reads are checked strictly. Times are ISO 8601 with an offset -- with
-``Z`` or with ``+00:00`` and fractions of a second: both are taken.
+reads are checked strictly, every one present (section 16: a value that may
+be ``null`` is ``null``, never absent). Times are ISO 8601 in UTC with the
+offset ``+00:00``, the fraction of a second there unless it is zero (section
+16); they are read by a parser of ISO 8601, not by their length.
 
 The client is built by ``create_app`` -- one per application -- and closed
 in its lifespan. ``transport`` is the seam of the tests: a stand-in of comms
-by the form, which lives in the tests only.
+by section 16, which lives in the tests only.
 """
 
 from datetime import datetime
@@ -42,7 +47,7 @@ from pydantic import (
 
 START_TIMEOUT_S = 10.0
 COMPLETE_TIMEOUT_S = 30.0
-"""Not less than 25 s: the form's word for ``complete``."""
+"""Not less than 25 s: section 16's word for ``complete``."""
 
 COMMS_CLASSES = frozenset(
     {
@@ -55,9 +60,13 @@ COMMS_CLASSES = frozenset(
         "id_token_invalid",
         "unauthorized",
         "unavailable",
+        "not_found",
     }
 )
-"""The classes of refusal of the form, section 6."""
+"""The classes of refusal the two routes answer (``v4.2.0``): the six of a
+sign-in (section 16), the API's own -- ``validation``, ``unauthorized``,
+``unavailable`` -- and ``not_found``: with the option ``login`` off, neither
+route exists (section 3a; changed by DM-161)."""
 
 
 class CommsRefusedError(Exception):

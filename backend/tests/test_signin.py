@@ -2,19 +2,23 @@
 
 import hashlib
 import time
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 from redis import Redis as SyncRedis
 
-from app.access.comms import COMPLETE_TIMEOUT_S, START_TIMEOUT_S
+from app.access.comms import COMPLETE_TIMEOUT_S, START_TIMEOUT_S, LoginStarted
 from app.access.login import COMMS_REFUSAL
 from app.access.sessions import SESSION_TTL_S
 from tests.comms_fake import (
+    COMPLETE_NO_BOT_ACCESS,
+    COMPLETE_NULLS,
     COMPLETE_OK,
-    COMPLETE_OK_OFFSET,
+    COMPLETE_WHOLE_SECOND,
     REFUSALS,
-    START_OK_OFFSET,
+    START_OK,
+    START_SAMPLE,
     STATE,
     FakeComms,
 )
@@ -28,7 +32,9 @@ from tests.conftest import (
 from tests.people import World, access_app
 from tests.signin import SignIn, client_of, outcome, signin_app
 
-# Section 6 of the form, written out here: the nine classes of refusal.
+# The classes the two routes answer, written out here: comms v4.2.0, sections
+# 5 and 16 -- and not_found, the option login off (section 3a). Changed by
+# DM-161: the form of 24.11 had nine; not_found was off the form.
 FORM_CLASSES = {
     "validation",
     "login_unknown",
@@ -39,6 +45,7 @@ FORM_CLASSES = {
     "id_token_invalid",
     "unauthorized",
     "unavailable",
+    "not_found",
 }
 EXPECTED = {
     "login_unknown": "restart",
@@ -50,6 +57,7 @@ EXPECTED = {
     "id_token_invalid": "refused",
     "validation": "defect",
     "unauthorized": "defect",
+    "not_found": "unavailable",
 }
 
 
@@ -78,7 +86,7 @@ def test_start_asks_comms_as_the_form_says(signin: SignIn) -> None:
         line = _cookie_line(answer, name).lower()
         for part in ("httponly", "secure", "samesite=lax", "path=/auth/telegram"):
             assert part in line, (name, part)
-        assert "max-age=600" in line  # the attempt's term: the form's ten minutes
+        assert "max-age=600" in line  # the attempt's term: section 16's ten minutes
     assert _cookie_line(answer, "panel_login").startswith(f"panel_login={STATE};")
 
 
@@ -131,7 +139,7 @@ def test_a_refusal_at_the_start(signin: SignIn, error_class: str) -> None:
 
 
 def test_comms_silent_is_try_later(signin: SignIn) -> None:
-    assert COMPLETE_TIMEOUT_S >= 25  # the form's word
+    assert COMPLETE_TIMEOUT_S >= 25  # section 16's word
     assert START_TIMEOUT_S <= COMPLETE_TIMEOUT_S
     signin.start("b")
     signin.fake.silent = True
@@ -144,21 +152,20 @@ def test_comms_silent_is_try_later(signin: SignIn) -> None:
         (200, '{"provider":"telegram"}'),
         (
             200,
-            COMPLETE_OK.replace("{ID}", "1").replace('"subject":"1"', '"subject":"2"'),
+            COMPLETE_OK.replace('"subject": "123456789"', '"subject": "2"'),
         ),
         (
             200,
-            COMPLETE_OK.replace("{ID}", "1").replace(
-                '"telegram","subject"', '"x","subject"'
-            ),
+            COMPLETE_OK.replace('"provider": "telegram"', '"provider": "x"'),
         ),
         (
             200,
-            COMPLETE_OK.replace("{ID}", "1").replace(
-                "2026-12-01T10:03:12Z", "2026-12-01T10:03:12"
+            COMPLETE_OK.replace(
+                "2026-12-01T10:03:12.654321+00:00", "2026-12-01T10:03:12.654321"
             ),
         ),
-        (200, COMPLETE_OK.replace("{ID}", '"1"')),
+        (200, COMPLETE_OK.replace('"id": 123456789', '"id": "123456789"')),
+        (200, COMPLETE_OK.replace('    "last_name": null,\n', "")),
         (200, "not json"),
         (418, '{"error":{"class":"teapot","message":"x"}}'),
         (500, "<html>"),
@@ -169,6 +176,7 @@ def test_comms_silent_is_try_later(signin: SignIn) -> None:
         "provider",
         "naive-time",
         "id-a-string",
+        "a-key-absent",
         "not-json",
         "unknown-class",
         "not-the-form",
@@ -183,25 +191,27 @@ def test_an_answer_off_the_form_is_a_defect(
 
 
 def test_a_start_off_the_form_is_a_defect(signin: SignIn) -> None:
-    signin.fake.start = (200, START_OK_OFFSET.replace("https://oauth", "http://oauth"))
+    signin.fake.start = (200, START_OK.replace("https://oauth", "http://oauth"))
     assert outcome(signin.start("b")) == {"reason": "defect"}
 
 
-def test_times_with_an_offset_and_fractions_are_taken(signin: SignIn) -> None:
-    signin.fake.start = (200, START_OK_OFFSET)
-    signin.fake.person(SUPERADMIN_ID, COMPLETE_OK_OFFSET)
-    assert signin.start("b").status_code == 302
-    assert outcome(signin.back("b")) == {"signed_in": "yes"}
-    me = signin.me("b").json()
-    assert me["user"]["first_name"] == "Анна"
+def test_times_with_and_without_a_fraction_are_taken(signin: SignIn) -> None:
+    """Changed by DM-161: comms v4.2.0 writes +00:00 only, the fraction unless
+    it is zero (section 16) -- the samples have one, the edit none."""
+    for sample in (COMPLETE_OK, COMPLETE_WHOLE_SECOND):
+        signin.fake.person(SUPERADMIN_ID, sample)
+        assert signin.start("b").status_code == 302
+        assert outcome(signin.back("b")) == {"signed_in": "yes"}
+        me = signin.me("b").json()
+        assert me["user"]["first_name"] == "Anna"
 
 
 def test_the_profile_is_kept_at_every_sign_in(signin: SignIn, migrated_db: str) -> None:
-    signin.fake.person(SUPERADMIN_ID, COMPLETE_OK_OFFSET)  # bot access false
+    signin.fake.person(SUPERADMIN_ID, COMPLETE_NO_BOT_ACCESS)  # the live 24.11
     signin.start("b")
     signin.back("b")
     assert query_scalar(migrated_db, "SELECT bot_access_granted FROM users") is False
-    signin.login("b", SUPERADMIN_ID)  # COMPLETE_OK: bot access true, username anna
+    signin.login("b", SUPERADMIN_ID)  # the sample: bot access true, username anna
     assert query_scalar(migrated_db, "SELECT bot_access_granted FROM users") is True
     assert query_scalar(migrated_db, "SELECT username FROM users") == "anna"
     assert query_scalar(migrated_db, "SELECT count(*) FROM users") == 1
@@ -438,3 +448,57 @@ def test_a_new_superadmin_with_redis_down_is_put_off(
         )
         == 1
     )
+
+
+def test_the_sample_of_start_word_for_word_is_read() -> None:
+    """The sample of section 16 as it stands, its 2026 too, is read by the
+    client; the flow's ``START_OK`` differs from it by the year alone (the
+    cookie's term turns on ``expires_at``). Added by DM-161."""
+    started = LoginStarted.model_validate_json(START_SAMPLE)
+    assert started.state == STATE
+    assert started.expires_at == datetime(2026, 12, 1, 10, 10, 0, 482913, tzinfo=UTC)
+    year = "2099-12-01T10:10:00.482913+00:00"
+    assert START_SAMPLE.replace("2026-12-01T10:10:00.482913+00:00", year) == START_OK
+
+
+@pytest.mark.parametrize("route", ["start", "complete"])
+def test_comms_login_off_is_unavailable_and_logged(
+    signin: SignIn, route: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """comms' option login off: both routes are 404 not_found (section 3a).
+    The person reads "unavailable", as with comms not connected; the log says
+    why. The pair: comms not connected says it under its own event. Added by
+    DM-161."""
+    caplog.set_level("WARNING", logger="app.access.login")
+    if route == "start":
+        signin.fake.start = REFUSALS["not_found"]
+        answer = signin.start("b")
+    else:
+        signin.start("b")
+        signin.fake.complete = REFUSALS["not_found"]
+        answer = signin.back("b")
+    assert outcome(answer) == {"reason": "unavailable"}
+    events = [getattr(r, "event", "") for r in caplog.records]
+    assert events == ["login.comms_login_off"]
+    assert signin.token("b") is None
+
+
+def test_an_unavailable_complete_is_not_repeated(signin: SignIn) -> None:
+    """``unavailable`` of ``complete`` leaves unknown whether the attempt was
+    taken (section 16); the Panel does not repeat it -- the person begins
+    again. Added by DM-161."""
+    signin.start("b")
+    signin.fake.complete = REFUSALS["unavailable"]
+    assert outcome(signin.back("b")) == {"reason": "try_later"}
+    assert signin.fake.completes() == 1
+
+
+def test_a_person_with_every_null_signs_in(signin: SignIn, migrated_db: str) -> None:
+    """Names and photo ``null`` (section 16: a value that may be null is
+    null, an empty string too): the sign-in goes on, the profile is empty.
+    Added by DM-161."""
+    signin.fake.person(SUPERADMIN_ID, COMPLETE_NULLS)
+    signin.start("b")
+    assert outcome(signin.back("b")) == {"signed_in": "yes"}
+    assert query_scalar(migrated_db, "SELECT first_name FROM users") is None
+    assert query_scalar(migrated_db, "SELECT username FROM users") is None
