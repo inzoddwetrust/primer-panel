@@ -9,6 +9,14 @@
 // else -- the projects. A path
 // the page does not know leads to `/`. The container serves index.html for
 // every path (nginx/default.conf.template), so /login opens by its link.
+//
+// A parameter of a path has its form (DM-210, PRIMER-PANEL-REVIEW-0001): a
+// server and a project are UUIDs, a run is the machine's run id. vue-router
+// decodes a parameter -- `/servers/..%2F..%2Fusers` gave `../../users` to
+// the screen, which put it into a path of the API (measured, 4.6.4). A
+// parameter off its form matches no page: the path is one the Panel does not
+// know and leads to `/`, and no screen is made of it. What the Panel writes
+// itself -- a link to a run keeps its colons -- is of the form.
 
 import { createRouter, type RouterHistory } from 'vue-router'
 import AddServerView from './views/AddServerView.vue'
@@ -22,6 +30,13 @@ import ProjectsView from './views/ProjectsView.vue'
 import RunView from './views/RunView.vue'
 import ServerView from './views/ServerView.vue'
 
+// Written out, as vue-router takes them: the form of a UUID, and of a run's
+// id (pridem.report.schema.RUN_ID: `2026-11-25T10:00:00Z-a3f9`).
+export const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+export const RUN_ID = '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z-[0-9a-f]{4}'
+const SERVER = `/servers/:serverId(${UUID})`
+const PROJECT = `/projects/:projectId(${UUID})`
+
 export function createPanelRouter(history: RouterHistory) {
   return createRouter({
     history,
@@ -31,22 +46,27 @@ export function createPanelRouter(history: RouterHistory) {
       { path: '/', name: 'fleet', component: FleetView },
       { path: '/me', name: 'me', component: MeView },
       // A server's card (DM-155)
-      { path: '/servers/:serverId', name: 'server', component: ServerView, props: true },
+      { path: SERVER, name: 'server', component: ServerView, props: true },
       // A server's passport (DM-158)
       {
-        path: '/servers/:serverId/passport',
+        path: `${SERVER}/passport`,
         name: 'passport',
         component: PassportView,
         props: true,
       },
       // A run (DM-156)
-      { path: '/servers/:serverId/runs/:runId', name: 'run', component: RunView, props: true },
+      {
+        path: `${SERVER}/runs/:runId(${RUN_ID})`,
+        name: 'run',
+        component: RunView,
+        props: true,
+      },
       // The screens of access (DM-152)
       { path: '/projects', name: 'projects', component: ProjectsView },
-      { path: '/projects/:projectId', name: 'project', component: ProjectView, props: true },
+      { path: PROJECT, name: 'project', component: ProjectView, props: true },
       // A new server of a project (DM-157)
       {
-        path: '/projects/:projectId/servers/new',
+        path: `${PROJECT}/servers/new`,
         name: 'add-server',
         component: AddServerView,
         props: true,

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '../api/client'
+import { apiPath } from '../api/paths'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import { useRuntimeConfig } from '../config-key'
 
@@ -51,7 +52,7 @@ async function poll(): Promise<void> {
   if (!issued.value) return
   try {
     state.value = await api.get<State>(
-      `/api/v1/projects/${props.projectId}/registration-tokens/${issued.value.id}`,
+      apiPath`/api/v1/projects/${props.projectId}/registration-tokens/${issued.value.id}`,
     )
     expired.value = !state.value.used_at && new Date(state.value.expires_at) <= new Date()
     if (state.value.used_at || expired.value) stop()
@@ -67,7 +68,9 @@ async function issue(): Promise<void> {
   state.value = null
   expired.value = false
   try {
-    issued.value = await api.post<Issued>(`/api/v1/projects/${props.projectId}/registration-tokens`)
+    issued.value = await api.post<Issued>(
+      apiPath`/api/v1/projects/${props.projectId}/registration-tokens`,
+    )
     timer = setInterval(() => void poll(), POLL_MS)
   } catch (failure: unknown) {
     error.value = failure

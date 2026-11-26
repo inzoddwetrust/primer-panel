@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ApiError, useApi } from '../api/client'
+import { apiPath } from '../api/paths'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import ConfirmBox from '../components/ConfirmBox.vue'
 import KeyWaitNote from '../components/KeyWait.vue'
@@ -44,13 +45,13 @@ const queued = ref<string | null>(null)
 const busy = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
-const base = () => `/api/v1/servers/${props.serverId}`
+const base = () => apiPath`/api/v1/servers/${props.serverId}`
 
 async function load(): Promise<void> {
   try {
     const [found, history] = await Promise.all([
       api.get<FleetServer>(base()),
-      api.get<RunRow[]>(`${base()}/runs`),
+      api.get<RunRow[]>(apiPath`${base()}/runs`),
     ])
     head.value = found
     runs.value = history
@@ -67,7 +68,7 @@ async function load(): Promise<void> {
 // is the head's to say, as for the buttons.
 async function loadKey(): Promise<void> {
   try {
-    keyWait.value = await api.get<KeyWait | null>(`${base()}/key-wait`)
+    keyWait.value = await api.get<KeyWait | null>(apiPath`${base()}/key-wait`)
   } catch (failure: unknown) {
     if (!(failure instanceof ApiError && failure.status === 404)) error.value = failure
   }
@@ -75,7 +76,7 @@ async function loadKey(): Promise<void> {
 
 async function loadButtons(): Promise<void> {
   try {
-    buttons.value = await api.get<Button[]>(`${base()}/verbs`)
+    buttons.value = await api.get<Button[]>(apiPath`${base()}/verbs`)
   } catch (failure: unknown) {
     if (!(failure instanceof ApiError && failure.status === 404)) error.value = failure
   }
@@ -94,7 +95,7 @@ async function send(args: Record<string, unknown>, confirmed: boolean): Promise<
   busy.value = true
   pending.value = null
   try {
-    await api.post(`${base()}/commands`, { verb: chosen.value.verb, args, confirmed })
+    await api.post(apiPath`${base()}/commands`, { verb: chosen.value.verb, args, confirmed })
     queued.value = label(chosen.value)
     error.value = null
   } catch (failure: unknown) {

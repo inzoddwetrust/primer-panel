@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '../api/client'
+import { apiPath } from '../api/paths'
 import { cell, columnTargets, personName, staffTouched, type Member, type Project } from '../access'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import ConfirmBox from '../components/ConfirmBox.vue'
@@ -26,7 +27,7 @@ const error = ref<unknown>(null)
 const pending = ref<{ message: string; run: () => Promise<void> } | null>(null)
 
 async function projectRows(project: Project): Promise<Row[]> {
-  const members = await api.get<Member[]>(`/api/v1/projects/${project.id}/members`)
+  const members = await api.get<Member[]>(apiPath`/api/v1/projects/${project.id}/members`)
   const staff = members.filter((member) => !member.is_admin)
   return members.filter((member) => member.is_admin).map((member) => ({ project, member, staff }))
 }
@@ -46,8 +47,10 @@ async function load(): Promise<void> {
 }
 
 async function put(row: Row, sent: string[]): Promise<void> {
-  const base = `/api/v1/projects/${row.project.id}`
-  await api.put(`${base}/members/${row.member.user.id}/permissions`, { permissions: sent })
+  const base = apiPath`/api/v1/projects/${row.project.id}`
+  await api.put(apiPath`${base}/members/${row.member.user.id}/permissions`, {
+    permissions: sent,
+  })
   const fresh = await projectRows(row.project)
   rows.value = rows.value.flatMap((each) =>
     each.project.id !== row.project.id

@@ -32,6 +32,7 @@ from app.fleet.reasons import (
     PINNED_RELEASE,
     LastVerdict,
     RedReason,
+    moment,
     order_key,
     reasons,
     services,
@@ -123,11 +124,32 @@ def _health(snapshot: BoxSnapshot | None) -> Health | None:
     )
 
 
-def _ssl(snapshot: BoxSnapshot | None) -> SslRef | None:
+def _ssl(server_id: uuid.UUID, snapshot: BoxSnapshot | None) -> SslRef | None:
+    """The certificate as the page shows it; an end that is no date -- no
+    data, logged (DM-210): the page shows a person no text of the box's that
+    the Panel could not read. A start of renewal that is none -- the end
+    alone."""
     if snapshot is None or isinstance(snapshot.ssl, Unmeasured):
         return None
     ssl = snapshot.ssl
     renews = ssl.renews_from if isinstance(ssl.renews_from, str) else None
+    unread = [
+        name
+        for name, value in (("expires", ssl.expires), ("renews_from", renews))
+        if value is not None and moment(value) is None
+    ]
+    if unread:
+        logger.warning(
+            "a moment of a certificate that is no date",
+            extra={
+                "event": "fleet.ssl_moment_unread",
+                "ctx": {"server_id": str(server_id), "fields": unread},
+            },
+        )
+    if "expires" in unread:
+        return None
+    if "renews_from" in unread:
+        renews = None
     return SslRef(mode=ssl.mode, expires=ssl.expires, renews_from=renews)
 
 
@@ -231,7 +253,7 @@ async def describe(
                     for part in parts
                 ],
                 health=_health(snapshot),
-                ssl=_ssl(snapshot),
+                ssl=_ssl(server.id, snapshot),
                 measured_at=None if snapshot is None else snapshot.measured_at,
                 reasons=found,
             )

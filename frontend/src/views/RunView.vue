@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ApiError, useApi } from '../api/client'
+import { apiPath } from '../api/paths'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import ConfirmBox from '../components/ConfirmBox.vue'
 import KeyWaitNote from '../components/KeyWait.vue'
@@ -38,7 +39,7 @@ let stream: StreamSource | undefined
 const steps = computed(() => ladder(lines.value))
 const log = computed(() => logLines(lines.value, all.value))
 const more = computed(() => lines.value.filter((l) => l.event === 'log').length > log.value.length)
-const base = () => `/api/v1/servers/${props.serverId}/runs/${props.runId}`
+const base = () => apiPath`/api/v1/servers/${props.serverId}/runs/${props.runId}`
 
 async function load(): Promise<void> {
   try {
@@ -55,7 +56,14 @@ async function load(): Promise<void> {
 }
 
 function listen(): void {
-  stream = open(`${config.apiOrigin}/api/v1/streams/servers/${props.serverId}/runs/${props.runId}`)
+  let path: string
+  try {
+    path = String(apiPath`/api/v1/streams/servers/${props.serverId}/runs/${props.runId}`)
+  } catch (failure: unknown) {
+    error.value = failure // no stream of an address that is not of its form
+    return
+  }
+  stream = open(config.apiOrigin + path)
   stream.addEventListener('line', (event) => {
     lines.value = [...lines.value, JSON.parse(event.data) as Line]
   })
@@ -84,7 +92,7 @@ async function send(confirmed: boolean, name: string | null): Promise<void> {
   pending.value = null
   const args = name === null ? { ...repeat.args } : { ...repeat.args, confirm: name }
   try {
-    await api.post(`/api/v1/servers/${props.serverId}/commands`, {
+    await api.post(apiPath`/api/v1/servers/${props.serverId}/commands`, {
       verb: repeat.verb,
       args,
       confirmed,

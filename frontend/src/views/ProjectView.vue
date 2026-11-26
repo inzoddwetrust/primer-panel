@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { ApiError, useApi } from '../api/client'
+import { apiPath } from '../api/paths'
 import {
   cell,
   inviteLink,
@@ -61,7 +62,7 @@ const appoint = reactive({ userId: '', permissions: [] as string[] })
 const invite = reactive({ isAdmin: false, permissions: [] as string[], ttlHours: 168 })
 const link = ref<string | null>(null)
 
-const base = computed(() => `/api/v1/projects/${props.projectId}`)
+const base = computed(() => apiPath`/api/v1/projects/${props.projectId}`)
 
 async function act(run: () => Promise<unknown>): Promise<void> {
   error.value = null
@@ -86,7 +87,7 @@ async function load(): Promise<void> {
     try {
       const [found, people, list] = await Promise.all([
         api.get<Project>(base.value),
-        api.get<Member[]>(`${base.value}/members`),
+        api.get<Member[]>(apiPath`${base.value}/members`),
         api.get<{ permissions: string[] }>('/api/v1/permissions'),
       ])
       project.value = found
@@ -100,7 +101,7 @@ async function load(): Promise<void> {
       throw failure
     }
     if (givesPeople.value) {
-      invites.value = await api.get<Invite[]>(`${base.value}/invites`)
+      invites.value = await api.get<Invite[]>(apiPath`${base.value}/invites`)
     }
     if (superadmin.value) {
       users.value = await api.get<Person[]>('/api/v1/users')
@@ -129,7 +130,9 @@ function save(member: Member): void {
   const shown = member.is_admin ? all.value : visible.value
   const sent = setToSend(all.value, chosen.value, member.permissions, shown)
   const put = async () => {
-    await api.put(`${base.value}/members/${member.user.id}/permissions`, { permissions: sent })
+    await api.put(apiPath`${base.value}/members/${member.user.id}/permissions`, {
+      permissions: sent,
+    })
     editing.value = null
   }
   const taken = member.permissions.filter((permission) => !sent.includes(permission))
@@ -142,7 +145,7 @@ function save(member: Member): void {
 }
 
 function revoke(member: Member): void {
-  const run = () => api.post(`${base.value}/members/${member.user.id}/revoke`)
+  const run = () => api.post(apiPath`${base.value}/members/${member.user.id}/revoke`)
   if (member.is_admin) {
     ask(t('project.revoke_admin_confirm'), String(member.user.telegram_id), run)
   } else {
@@ -152,13 +155,15 @@ function revoke(member: Member): void {
 
 function archive(): void {
   if (project.value) {
-    ask(t('project.archive_confirm'), project.value.slug, () => api.post(`${base.value}/archive`))
+    ask(t('project.archive_confirm'), project.value.slug, () =>
+      api.post(apiPath`${base.value}/archive`),
+    )
   }
 }
 
 async function appointAdmin(): Promise<void> {
   await actThenLoad(() =>
-    api.post(`${base.value}/admins`, {
+    api.post(apiPath`${base.value}/admins`, {
       user_id: appoint.userId,
       permissions: appoint.permissions,
     }),
@@ -167,18 +172,20 @@ async function appointAdmin(): Promise<void> {
 
 async function createInvite(): Promise<void> {
   await act(async () => {
-    const made = await api.post<{ token: string }>(`${base.value}/invites`, {
+    const made = await api.post<{ token: string }>(apiPath`${base.value}/invites`, {
       permissions: invite.permissions,
       is_admin: superadmin.value && invite.isAdmin,
       ttl_hours: invite.ttlHours,
     })
     link.value = inviteLink(window.location.origin, made.token)
   })
-  invites.value = givesPeople.value ? await api.get<Invite[]>(`${base.value}/invites`) : []
+  invites.value = givesPeople.value ? await api.get<Invite[]>(apiPath`${base.value}/invites`) : []
 }
 
 function revokeInvite(item: Invite): void {
-  ask(t('invites.revoke_confirm'), null, () => api.post(`${base.value}/invites/${item.id}/revoke`))
+  ask(t('invites.revoke_confirm'), null, () =>
+    api.post(apiPath`${base.value}/invites/${item.id}/revoke`),
+  )
 }
 
 async function copy(): Promise<void> {

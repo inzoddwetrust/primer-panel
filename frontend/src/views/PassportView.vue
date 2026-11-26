@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ApiError, useApi } from '../api/client'
+import { apiPath } from '../api/paths'
 import ApiErrorNote from '../components/ApiErrorNote.vue'
 import ConfirmBox from '../components/ConfirmBox.vue'
 import type { FleetServer } from '../fleet'
@@ -59,7 +60,7 @@ interface SecretEdit {
 }
 const secret = ref<SecretEdit | null>(null)
 
-const base = () => `/api/v1/servers/${props.serverId}`
+const base = () => apiPath`/api/v1/servers/${props.serverId}`
 const editable = computed(() => head.value !== null && mayEdit(me.me, head.value.project.id))
 
 async function act(run: () => Promise<unknown>): Promise<void> {
@@ -79,7 +80,7 @@ async function load(): Promise<void> {
     try {
       const [found, read] = await Promise.all([
         api.get<FleetServer>(base()),
-        api.get<Passport>(`${base()}/passport`),
+        api.get<Passport>(apiPath`${base()}/passport`),
       ])
       head.value = found
       passport.value = read
@@ -121,7 +122,7 @@ function saveField(): void {
   }
   const body = { base: passport.value.base, path: edit.path, value }
   void actThenLoad(async () => {
-    saved.value = await api.put<Edited>(`${base()}/passport/field`, body)
+    saved.value = await api.put<Edited>(apiPath`${base()}/passport/field`, body)
     editing.value = null
   })
 }
@@ -140,7 +141,7 @@ function saveSecret(): void {
   // the value leaves the page with this request: wiped after any answer
   edit.value = ''
   void actThenLoad(async () => {
-    saved.value = await api.put<Edited>(`${base()}/passport/secret`, body)
+    saved.value = await api.put<Edited>(apiPath`${base()}/passport/secret`, body)
     secret.value = null
   })
 }
@@ -157,7 +158,7 @@ async function send(confirmed: boolean): Promise<void> {
   asking.value = false
   queued.value = false
   await actThenLoad(async () => {
-    await api.post(`${base()}/passport/apply`, { confirmed })
+    await api.post(apiPath`${base()}/passport/apply`, { confirmed })
     queued.value = true
   })
 }

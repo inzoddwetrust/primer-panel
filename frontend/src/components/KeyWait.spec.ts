@@ -6,7 +6,7 @@ import ServerView from '../views/ServerView.vue'
 import { createPanelI18n } from '../i18n'
 import { createPanelRouter } from '../router'
 import { page } from '../testing'
-import { waitsUntil, type KeyWait as Wait } from '../run'
+import { httpsPage, waitsUntil, type KeyWait as Wait } from '../run'
 
 // A wait for a key as the API gives it, written out (DM-159).
 const KEY =
@@ -144,5 +144,70 @@ describe('the card of a server', () => {
       'GET /api/v1/servers/s1/key-wait': null,
     })
     expect(wrapper.find('[data-test="key-wait"]').exists()).toBe(false)
+  })
+})
+
+// DM-210 (PRIMER-PANEL-REVIEW-0001): the page of a key comes from the
+// journal of a box, and a link is made of it in the person's browser.
+describe('probe DM-210: the page of a key is a link only when it is https', () => {
+  const NO_LINKS = [
+    'javascript:alert(document.cookie)',
+    'JavaScript:alert(1)',
+    ' javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'vbscript:msgbox(1)',
+    'http://github.com/o/velo/settings/keys',
+    'https://user:secret@github.com/o/velo',
+    'https://user@github.com/o/velo',
+    '//github.com/o/velo',
+    '/o/velo/settings/keys',
+    'github.com/o/velo',
+    'https://',
+    '',
+  ]
+
+  it.each(NO_LINKS)('no link and no text of %j', async (crooked) => {
+    const wrapper = await shown(wait({ page: crooked }))
+    expect(wrapper.find('[data-test="key-page"]').exists()).toBe(false)
+    expect(wrapper.findAll('a').map((a) => a.attributes('href'))).toEqual([])
+    if (crooked !== '') {
+      expect(wrapper.html()).not.toContain(crooked.trim().slice(0, 12))
+    }
+    // the rest of the wait is on the page
+    expect(wrapper.get('[data-test="key-key"]').text()).toBe(KEY)
+    expect(httpsPage(crooked)).toBeNull()
+  })
+
+  it('the pair: an https address is the link, as it came', async () => {
+    for (const good of [PAGE, 'https://gitlab.example.com:8443/o/x/-/settings/repository#keys']) {
+      const wrapper = await shown(wait({ page: good }))
+      expect(wrapper.get('[data-test="key-page"]').attributes('href')).toBe(good)
+      expect(httpsPage(good)).toBe(good)
+    }
+  })
+
+  it('a page that is no text is no link', () => {
+    for (const value of [null, undefined, 5, true, [PAGE], { href: PAGE }]) {
+      expect(httpsPage(value)).toBeNull()
+    }
+  })
+})
+
+describe('a wait the box counts oddly takes no screen down (DM-210)', () => {
+  it('a wait that ended before it began is shown as it is, a moment in the past', async () => {
+    const wrapper = await shown(wait({ wait_s: -5 }))
+    expect(wrapper.get('[data-test="key-until"]').text()).toContain('2026-11-26T11:59:58Z')
+    expect(wrapper.find('[data-test="key-no-wait"]').exists()).toBe(false)
+  })
+
+  it.each([
+    ['seconds no moment holds', { wait_s: 1e300 }],
+    ['seconds below every moment', { wait_s: -1e300 }],
+    ['a start that is no moment', { at: 'soon' }],
+  ])('%s: the wait is shown without its end', async (_name, extra) => {
+    expect(waitsUntil(wait(extra))).toBeNull()
+    const wrapper = await shown(wait(extra))
+    expect(wrapper.find('[data-test="key-until"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="key-key"]').text()).toBe(KEY)
   })
 })

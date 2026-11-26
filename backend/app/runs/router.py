@@ -213,13 +213,14 @@ async def stream_lines(
     sent = after
     shown: RunStatus | None = None
     told: dict[str, object] | None = None
+    unread: set[int] = set()  # notices this stream has logged as unread
     quiet = 0.0
     while True:
         async with sessions() as session:
             run = await _run(session, server_id, run_id)
             lines = await _gapless(session, run_id, sent)
             status = await _state_of(session, server_id, run)
-            waits = await key_wait(session, run_id)
+            waits = await key_wait(session, run_id, said=unread)
         for seq, body in lines:
             yield _event("line", body, seq)
             sent = seq

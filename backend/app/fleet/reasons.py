@@ -20,7 +20,10 @@ shows the reasons and the order the API gives.
   expires``.
 
 No data is no reason: a part not measured, no full form, a version that
-does not parse -- the field says "no data", the server is not red for it.
+does not parse, a moment that is no date -- the field says "no data", the
+server is not red for it (``2026-13-45T99:99:99Z`` passes the form of a
+moment of ``box-state.v1`` and is none: one box must not take the fleet down
+for everybody, DM-210).
 
 The order: more reasons first; then the most senior reason (``SENIORITY``,
 the order of ``RedReason``: a box not heard, a verdict not to be trusted, a
@@ -58,9 +61,13 @@ class LastVerdict:
     verified: bool
 
 
-def moment(value: str) -> datetime:
-    """A moment of the box (``...Z``) as a time."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+def moment(value: str) -> datetime | None:
+    """A moment of the box (``...Z``) as a time; ``None`` -- the text has the
+    form of a moment and is no date (a month 13, a day 30 of February)."""
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
 
 
 def behind(version: str | None) -> bool | None:
@@ -98,9 +105,15 @@ def ssl_due(snapshot: BoxSnapshot | None, now: datetime) -> bool:
     if snapshot is None or isinstance(snapshot.ssl, Unmeasured):
         return False
     ssl = snapshot.ssl
-    if now >= moment(ssl.expires):
+    expires = moment(ssl.expires)
+    if expires is None:
+        return False  # no date is no data: not red for it
+    if now >= expires:
         return True
-    return isinstance(ssl.renews_from, str) and now >= moment(ssl.renews_from)
+    if not isinstance(ssl.renews_from, str):
+        return False
+    renews = moment(ssl.renews_from)
+    return renews is not None and now >= renews
 
 
 def reasons(

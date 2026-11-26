@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { waitsUntil, type KeyWait } from '../run'
+import { httpsPage, waitsUntil, type KeyWait } from '../run'
 
 // A run waiting for a key to a repository (DM-159): the public key -- no
 // secret, shown to everybody who sees the server -- the page of the
@@ -12,6 +12,9 @@ import { waitsUntil, type KeyWait } from '../run'
 const props = defineProps<{ wait: KeyWait; serverId?: string }>()
 const { t } = useI18n()
 const until = computed(() => waitsUntil(props.wait))
+// A link only of an `https` address; anything else the box wrote is neither a
+// link nor a text on the page (DM-210).
+const page = computed(() => httpsPage(props.wait.page))
 
 async function copy(): Promise<void> {
   await navigator.clipboard.writeText(props.wait.key)
@@ -27,8 +30,8 @@ async function copy(): Promise<void> {
     <p v-if="wait.write && wait.why" data-test="key-why">{{ wait.why }}</p>
     <pre data-test="key-key">{{ wait.key }}</pre>
     <button type="button" data-test="key-copy" @click="copy">{{ t('key.copy') }}</button>
-    <p v-if="wait.page">
-      <a :href="wait.page" target="_blank" rel="noopener noreferrer" data-test="key-page">{{
+    <p v-if="page">
+      <a :href="page" target="_blank" rel="noopener noreferrer" data-test="key-page">{{
         t('key.page')
       }}</a>
     </p>

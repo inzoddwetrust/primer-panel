@@ -48,11 +48,17 @@ export class ApiTimeoutError extends Error {
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
+import type { ApiPath } from './paths'
+
+// A path is a text of the page's own source, or one made by apiPath
+// (src/api/paths.ts) -- the only way a parameter or an id gets into one.
+export type Path = string | ApiPath
+
 export interface ApiClient {
-  request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T>
-  get<T>(path: string): Promise<T>
-  post<T>(path: string, body?: unknown): Promise<T>
-  put<T>(path: string, body?: unknown): Promise<T>
+  request<T>(method: HttpMethod, path: Path, body?: unknown): Promise<T>
+  get<T>(path: Path): Promise<T>
+  post<T>(path: Path, body?: unknown): Promise<T>
+  put<T>(path: Path, body?: unknown): Promise<T>
 }
 
 export interface ClientOptions {
@@ -80,7 +86,7 @@ export function createApiClient(options: ClientOptions): ApiClient {
   const fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init))
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS
 
-  async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: HttpMethod, path: Path, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json'
@@ -93,7 +99,7 @@ export function createApiClient(options: ClientOptions): ApiClient {
     }, timeoutMs)
     let response: Response
     try {
-      response = await fetchFn(`${options.origin}${path}`, {
+      response = await fetchFn(options.origin + String(path), {
         method,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,

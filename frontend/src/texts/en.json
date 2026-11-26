@@ -33,6 +33,7 @@
   "error": {
     "network": "The Panel's API is not reachable.",
     "timeout": "The Panel's API did not answer in time.",
+    "path": "This address is not one of the Panel’s: nothing was asked of the API.",
     "request_id": "Request:"
   },
   "nav": {

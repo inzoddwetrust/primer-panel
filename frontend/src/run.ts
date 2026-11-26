@@ -40,11 +40,31 @@ export interface KeyWait {
 }
 
 // When a wait ends: its start and its seconds; null -- the run does not wait
-// (a write key that waits for nothing).
+// (a write key that waits for nothing: no seconds), or the box gave what no
+// moment can be made of (DM-210: a wait of 1e300 seconds made `toISOString`
+// throw and took the screen down). A wait the box says ended before it began
+// -- seconds below zero pass the API -- is shown as it is, a moment in the
+// past.
 export function waitsUntil(wait: KeyWait): string | null {
-  if (wait.wait_s <= 0) return null
+  if (wait.wait_s === 0) return null
   const end = new Date(Date.parse(wait.at) + wait.wait_s * 1000)
+  if (!Number.isFinite(end.getTime())) return null
   return end.toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+// The page of a repository's keys as a link, or null: an `https` address and
+// nothing else. The API gives none other (app/runs/keys.py, `https_page`);
+// this is the second line, at the place the link is made -- `javascript:` in
+// an `href` runs in the Panel's origin (DM-210).
+export function httpsPage(page: unknown): string | null {
+  if (typeof page !== 'string' || !page.startsWith('https://')) return null
+  let url: URL
+  try {
+    url = new URL(page)
+  } catch {
+    return null // no address at all
+  }
+  return url.username === '' && url.password === '' ? page : null
 }
 
 // A line of the run's journal (contract 2): its kind is `event`.

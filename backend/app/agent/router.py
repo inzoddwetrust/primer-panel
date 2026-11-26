@@ -9,6 +9,7 @@ credential (gate DM-153, R5).
 
 import hashlib
 import json
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -30,7 +31,7 @@ from pridem.protocol import (
     VerdictEnvelope,
 )
 from pridem.report.schema import RUN_ID
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -62,10 +63,27 @@ POLL_S = 60
 """The intervals the Panel gives a box (``PRIMER-PANEL-TZ-2`` sections 5, 6)."""
 
 
+def _finite(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"{text} is beyond a number of JSON")
+    return value
+
+
+def _no_constant(name: str) -> float:
+    raise ValueError(f"{name} is no number of JSON")
+
+
 def _parsed[M: BaseModel](model: type[M], body: bytes) -> M:
+    """``body`` by ``model`` of contract 4. A number that is none -- ``NaN``,
+    an infinity, ``1e400`` -- is refused here, with the rest that is not of
+    the contract (DM-210): the models take it for a float, and the table,
+    which is JSON, does not hold it -- that was a 500 of the box's every
+    retry, not a refusal."""
     try:
+        json.loads(body, parse_float=_finite, parse_constant=_no_constant)
         return model.model_validate_json(body)
-    except ValidationError as error:
+    except ValueError as error:  # a ValidationError is one
         raise PanelError(ErrorClass.INVALID, "the body is not of contract 4") from error
 
 

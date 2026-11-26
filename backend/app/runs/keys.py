@@ -16,15 +16,46 @@ waits. So:
 
 The public key is shown to everybody who sees the server: it is no secret
 (the owner's word of 26.11, DM-159).
+
+The box is below the Panel (DM-210): what a line of its journal says reaches
+a person only checked.
+
+- ``page`` becomes a link in the person's browser, so it is an ``https``
+  address or nothing (``https_page``): the model of contract 4 takes any text
+  for it, ``javascript:`` too.
+- The notice is read by a model of the Panel's own (``_Notice``), not by
+  indexing. The agent's API takes a line only by the model of the machine's
+  pinned release, but a line outlives the pin it was taken by: after a pin
+  that changes the notice, the lines of before are still in the table. One
+  that does not read is no wait -- ``None`` and a line of the log
+  (``runs.notice_off_form``) -- never a 500 of the run's page, of the card or
+  of the stream. Keys the model does not name are passed over: a key the
+  machine adds does not put the wait out.
 """
 
-from typing import Literal
+import logging
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.models import Event, Run, Verdict
+
+logger = logging.getLogger(__name__)
+
+PAGE_MAX = 2048
+"""The longest ``page`` that is a link: an address, not a text."""
 
 
 class KeyWait(BaseModel):
@@ -41,19 +72,68 @@ class KeyWait(BaseModel):
     reason: str | None
 
 
-def _mapping(value: object) -> dict[str, object]:
-    """A line's object: contract 4's model passed it into the table."""
-    if not isinstance(value, dict):
-        raise TypeError("a notice of the journal is an object")
-    return value
+class _Notice(BaseModel):
+    """A ``key_needed`` as the Panel reads it out of its table: every key the
+    wait is made of, each of its own type -- no text for a number, no number
+    for a flag. ``page`` and ``why`` are whatever came: ``https_page`` and
+    ``_text`` take them. ``wait_s`` is any number that is one (a wait that
+    ended before it began is shown as it is), never ``NaN`` or an infinity."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    repo: Annotated[StrictStr, Field(min_length=1)]
+    key: Annotated[StrictStr, Field(min_length=1)]
+    page: object = None
+    write: StrictBool
+    why: object = None
+    wait_s: Annotated[StrictFloat | StrictInt, Field(allow_inf_nan=False)]
+    again: StrictBool
+
+
+class _NoticeLine(BaseModel):
+    """The line of the notice: its moment and the notice."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    at: StrictStr
+    notice: _Notice
 
 
 def _text(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-async def key_wait(session: AsyncSession, run_id: str) -> KeyWait | None:
-    """The run's last wait for a key, and how it stands; ``None`` -- none."""
+def https_page(value: object) -> str | None:
+    """``value`` as an address a person may be sent to, or ``None``: a text
+    of at most ``PAGE_MAX``, with no space and no control character in it, of
+    the scheme ``https`` exactly, with a host and with no name or password
+    before it. Anything else the box wrote -- ``javascript:``, ``data:``,
+    ``http:`` -- is no link (DM-210)."""
+    if not isinstance(value, str) or not 0 < len(value) <= PAGE_MAX:
+        return None
+    if any(char.isspace() or not char.isprintable() for char in value):
+        return None
+    if not value.startswith("https://"):
+        return None
+    try:
+        parts = urlsplit(value)
+        host = parts.hostname
+    except ValueError:
+        return None
+    if not host:
+        return None
+    if parts.username is not None or parts.password is not None:
+        return None
+    return value
+
+
+async def key_wait(
+    session: AsyncSession, run_id: str, *, said: set[int] | None = None
+) -> KeyWait | None:
+    """The run's last wait for a key, and how it stands; ``None`` -- none, or
+    a notice that does not read. ``said`` -- the lines one reader has already
+    logged as unread (the stream asks again every poll): a ``seq`` in it is
+    not logged twice."""
     found = (
         await session.execute(
             select(Event.seq, Event.body)
@@ -69,7 +149,25 @@ async def key_wait(session: AsyncSession, run_id: str) -> KeyWait | None:
     if found is None:
         return None
     seq, body = found
-    notice = _mapping(body.get("notice"))
+    try:
+        line = _NoticeLine.model_validate(body)
+    except ValidationError as error:
+        if said is None or seq not in said:
+            # the field, not the branch of its type: ``notice.wait_s``
+            fields = sorted(
+                {".".join(str(part) for part in e["loc"][:2]) for e in error.errors()}
+            )
+            logger.warning(
+                "a notice of a key that does not read",
+                extra={
+                    "event": "runs.notice_off_form",
+                    "ctx": {"run_id": run_id, "seq": seq, "fields": fields},
+                },
+            )
+        if said is not None:
+            said.add(seq)
+        return None
+    notice = line.notice
     after = await session.scalar(
         select(Event.body)
         .where(
@@ -91,14 +189,14 @@ async def key_wait(session: AsyncSession, run_id: str) -> KeyWait | None:
             reason = given["code"]
     return KeyWait(
         run_id=run_id,
-        repo=str(notice["repo"]),
-        key=str(notice["key"]),
-        page=_text(notice.get("page")),
-        write=bool(notice["write"]),
-        why=_text(notice.get("why")),
-        wait_s=float(str(notice["wait_s"])),
-        again=bool(notice["again"]),
-        at=str(body["at"]),
+        repo=notice.repo,
+        key=notice.key,
+        page=https_page(notice.page),
+        write=notice.write,
+        why=_text(notice.why),
+        wait_s=float(notice.wait_s),
+        again=notice.again,
+        at=line.at,
         state=state,
         reason=reason,
     )
