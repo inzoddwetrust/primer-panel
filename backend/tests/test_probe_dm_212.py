@@ -323,13 +323,17 @@ def test_probe_DM_212_health_provides_what_primer_yaml_does(
     declared = sorted(product.provides)
     taken = sorted(k for k, v in product.env.items() if isinstance(v, Seam))
     assert declared == ["PRODUCT_STORAGE_ADDRESS"]
-    assert sorted(PROVIDES) == declared and sorted(TAKES) == taken == []
+    # Changed by DM-160, by the dispatcher's word on its gate: the Panel takes
+    # comms' two seams -- requires_satisfied is true once both have values
+    assert sorted(PROVIDES) == declared
+    assert sorted(TAKES) == taken == ["COMMS_API_URL", "COMMS_SERVICE_TOKEN"]
     seams = world.client.get("/health").json()["seams"]
-    assert seams == {"provides": declared, "requires_satisfied": True}
+    assert seams == {"provides": declared, "requires_satisfied": False}
 
 
-def test_requires_satisfied_is_counted(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_requires_satisfied_is_counted() -> None:
     """A seam taken and empty is not satisfied; given, it is."""
-    monkeypatch.setattr("app.seams.TAKES", ("COMMS_API_URL",))
     assert requires_satisfied({}) is False
-    assert requires_satisfied({"COMMS_API_URL": "http://comms-comms-app:8000"}) is True
+    assert requires_satisfied({"COMMS_API_URL": "http://comms-comms-app:8000"}) is False
+    given = {"COMMS_API_URL": "http://comms-comms-app:8000", "COMMS_SERVICE_TOKEN": "t"}
+    assert requires_satisfied(given) is True

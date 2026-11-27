@@ -7,12 +7,21 @@ machine `pridem` installs it from `primer.yaml`.
 - `primer.yaml` -- what the machine installs: the stack `primer-panel`,
   edition `core`, the sources of its environment, routes for the frontend and
   the API. It declares no `test`: the Panel's unit tests run in its CI (the
-  owner's decision of 22.11), and no dependency, so there is no `primer.lock`.
+  owner's decision of 22.11). comms is its dependency (DM-160): `>=4.3,<5`,
+  in the edition, the options `telegram` and `login` both required, the seams
+  `COMMS_API_URL` and `COMMS_SERVICE_TOKEN` from comms (`app/seams.py`).
+- `primer.lock` -- the exact comms: `v4.3.0` at its commit.
+- `comms-profile/` -- the Panel's profile for comms (data of the machine):
+  comms' chat baseline, three `msg.*` types each with a category; CI runs
+  `comms validate --profile` with the comms of `primer.lock`.
+- `deploy/panel-passport.example.yaml` -- the sample of the passport of the
+  Panel's own box, without one value: that box stands on a passport FILE for
+  ever (R-25); each `<...>` names where its value comes from.
 - `docker-compose.storage.yml` -- the second entry, `panel-storage` (DM-203):
   the Panel's object storage, RustFS pinned by digest, `persistent: true`,
   its root secret minted. No port, no route: its point `files` is for the
-  services that take `PRODUCT_STORAGE_ADDRESS` (comms v4.2.0 asks every
-  product for it), the value `panel-storage-panel-storage:9000`. No code of
+  services that take `PRODUCT_STORAGE_ADDRESS` (comms from v4.3.0 asks it
+  only with its option `llm`, which the Panel keeps off), the value `panel-storage-panel-storage:9000`. No code of
   the Panel uses it yet.
 - `backend/` -- the API. `app/main.py` is the factory
   (`uvicorn --factory app.main:create_app`): it builds the application's state
@@ -118,9 +127,8 @@ machine `pridem` installs it from `primer.yaml`.
   superadmin close every session of the person at once (an epoch per person).
   `GET /auth/telegram/start`, `GET /auth/telegram/return`, `POST
   /auth/logout`; every end of sign-in is a redirect to the frontend.
-  `COMMS_API_URL` and `COMMS_SERVICE_TOKEN` are optional until comms is a
-  dependency of the Panel (DM-160); `DOMAIN_FRONTEND` and `DOMAIN_API` come
-  from the passport.
+  `COMMS_API_URL` and `COMMS_SERVICE_TOKEN` are seams of comms (DM-160);
+  `DOMAIN_FRONTEND` and `DOMAIN_API` come from the passport.
 - `frontend/` -- the page (DM-151): Vue with `vue-router`, `pinia` and
   `vue-i18n`, the blank's form. `src/api/client.ts` -- the client of the
   API, made per application and provided (no module state), sending the

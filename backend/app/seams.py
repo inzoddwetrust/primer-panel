@@ -12,17 +12,29 @@ in CI, before a build, never on a box.
 - ``PROVIDES`` -- the names of ``provides`` of ``primer.yaml``;
 - ``TAKES`` -- the keys of its ``env`` of ``source: seam``. ``requires_satisfied``
   is true when each of them has its value in the environment the machine
-  rendered -- none now; comms' (DM-160) come here with its dependency.
+  rendered: comms' sign-in module, the address of its API and its token
+  (DM-160). The machine renders them before the Panel's first ``up``.
 """
 
-import os
 from collections.abc import Mapping
 
+from app.config import Settings
+
 PROVIDES: tuple[str, ...] = ("PRODUCT_STORAGE_ADDRESS",)
-TAKES: tuple[str, ...] = ()
+TAKES: tuple[str, ...] = ("COMMS_API_URL", "COMMS_SERVICE_TOKEN")
 
 
-def requires_satisfied(environ: Mapping[str, str] | None = None) -> bool:
-    """Every seam the Panel takes has its value."""
-    found = os.environ if environ is None else environ
-    return all(found.get(name) for name in TAKES)
+def requires_satisfied(given: Mapping[str, object]) -> bool:
+    """Every seam the Panel takes has its value, by its variable's name."""
+    return all(given.get(name) for name in TAKES)
+
+
+def settings_values(settings: Settings) -> dict[str, object]:
+    """The settings by the names of their variables (``OPS_REPO``,
+    ``COMMS_API_URL``): what the machine rendered and the Panel took."""
+    found: dict[str, object] = {}
+    for name, field in type(settings).model_fields.items():
+        alias = field.validation_alias
+        if isinstance(alias, str):
+            found[alias] = getattr(settings, name)
+    return found

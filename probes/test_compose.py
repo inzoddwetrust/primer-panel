@@ -6,6 +6,8 @@ its service are gone, ``REDIS_PASSWORD`` came with Redis.
 Changed by DM-149: ``SUPERADMIN_TELEGRAM_ID`` (a param of the passport).
 Changed by DM-150: ``DOMAIN_FRONTEND`` and ``DOMAIN_API``.
 Changed by DM-158: ``OPS_REPO`` (a param of the passport).
+Changed by DM-160: ``COMMS_API_URL`` and ``COMMS_SERVICE_TOKEN`` (seams of
+comms).
 """
 
 from pathlib import Path
@@ -23,6 +25,8 @@ STACK_ENV = {
     "DOMAIN_FRONTEND": "panel.probe.test",
     "DOMAIN_API": "api.panel.probe.test",
     "OPS_REPO": "file:///nonexistent/primer-ops-of-the-probe",
+    "COMMS_API_URL": "http://comms-comms-app:8000",
+    "COMMS_SERVICE_TOKEN": "stand-in-service-token-of-the-probe",
 }
 
 

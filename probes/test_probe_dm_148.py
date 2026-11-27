@@ -21,6 +21,11 @@ functions -- the check can be red.
 Changed by DM-158, by the dispatcher's word: ``OPS_REPO`` among the stand-ins
 -- the compose file asks ``${OPS_REPO:?}`` of the stack; an address of
 ``file://`` where nothing is passes the settings, and the app starts on it.
+
+Changed by DM-160, by the dispatcher's word on its gate: ``COMMS_API_URL``
+and ``COMMS_SERVICE_TOKEN`` among the stand-ins -- seams of comms the compose
+file asks of the stack; the app starts with both, its sign-in pointed at an
+address where nothing is.
 """
 
 import json
@@ -54,6 +59,8 @@ STACK_ENV = {
     "DOMAIN_FRONTEND": "panel.probe.test",
     "DOMAIN_API": "api.panel.probe.test",
     "OPS_REPO": "file:///nonexistent/primer-ops-of-the-probe",
+    "COMMS_API_URL": "http://comms-comms-app:8000",
+    "COMMS_SERVICE_TOKEN": "stand-in-service-token-of-the-probe",
 }
 
 READ = (

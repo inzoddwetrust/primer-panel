@@ -1,0 +1,22 @@
+# The Panel's profile for comms (DM-160): the notification types comms knows
+# for this product. Format: comms' profile loader, schema version 2
+# (deploy/INTEGRATION.md section 3; checked by `comms validate --profile` in
+# the Panel's CI and by the machine before comms takes it).
+#
+# The Panel sends no notification of its own yet: the profile holds comms'
+# own chat baseline -- the three msg.* types comms emits itself, each with a
+# category (comms refuses a msg.* type without one; the owner's word of
+# 25.11). They declare no channels and take comms' default, in_app. No
+# templates/: a letter comes as it is written.
+
+version: 2
+
+types:
+  msg.participant_message:
+    category: msg_participants
+
+  msg.support_message:
+    category: msg_support
+
+  msg.thread_closed:
+    category: msg_threads

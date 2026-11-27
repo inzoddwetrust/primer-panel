@@ -1,0 +1,77 @@
+# The passport of the Panel's own box -- a FILE, for ever (R-25, the owner's
+# word of 24.11): `pridem install --passport <this file, filled>`. It is not
+# in primer-ops and the Panel never shows or edits it: the file in the owner's
+# hands brings the Panel back from the console, without the Panel.
+#
+# THIS IS A SAMPLE, WITHOUT ONE VALUE (DM-160). Every <...> is what the owner
+# puts there; nothing of it is committed. Its form is contract 1; the machine's
+# loader passes this sample as it stands (tests/test_dm_160.py), so a filled
+# copy fails only on what was filled.
+#
+# Multi-line secrets (OPS_WRITE_KEY, OPS_AGE_KEY) are YAML block scalars `|`,
+# never `|-`: the machine writes a value to its file as it is, and OpenSSH reads
+# no private key whose last line has no newline -- `|` keeps it, `|-` strips it.
+schema: 1
+version: 1                         # up by one at every change of the file
+
+server:
+  name: primer-team                # <the box's name: lower-case, digits, dashes>
+  role: prod                       # prod: a tag of primer-panel below (the gate of DM-160)
+  os: ubuntu-24.04
+
+edition: core
+
+product:
+  repo: git@github.com:inzoddwetrust/primer-panel.git
+  ref: v0.1.0                      # <the tag of primer-panel the box runs>
+
+domains:
+  frontend: primer.team            # the page; DNS A -> the box
+  api: api.primer.team             # the API, the return of sign-in; DNS A -> the box
+
+languages: [en, ru]
+default_language: en
+
+options: [telegram, login]         # both required by the Panel (options_required)
+
+access:
+  mode: deploy-keys                # the machine mints a key per repository and waits for it in GitHub
+
+asked:
+  primer-panel:
+    # GitHub -> primer-ops -> Settings -> Deploy keys -> Add, "Allow write
+    # access": the PRIVATE part, whole, its BEGIN and END lines included
+    OPS_WRITE_KEY: |
+      <-----BEGIN OPENSSH PRIVATE KEY----- ... the write key of primer-ops ...>
+      <-----END OPENSSH PRIVATE KEY----->
+    # `age-keygen` on the owner's machine: the line AGE-SECRET-KEY-1...; its
+    # public part goes into the .sops.yaml of primer-ops as a recipient
+    OPS_AGE_KEY: |
+      <AGE-SECRET-KEY-1... the Panel's age identity ...>
+  comms:
+    # BotFather -> the bot -> API Token
+    TELEGRAM_BOT_TOKEN: "<the bot's token, from BotFather>"
+    # BotFather -> the bot -> Login Widget -> Switch to OpenID Connect Login:
+    # Client Secret; its Redirect URIs: https://api.primer.team/auth/telegram/return
+    TELEGRAM_LOGIN_CLIENT_SECRET: "<the bot's OIDC Client Secret, from BotFather>"
+
+params:
+  primer-panel:
+    SUPERADMIN_TELEGRAM_ID: "<the owner's Telegram id, digits>"
+    OPS_REPO: "ssh://git@ssh.github.com:443/<owner>/primer-ops.git"
+  comms:
+    TELEGRAM_LINK_HOST: t.me       # the host of the bot's links
+
+policies:
+  ssl: letsencrypt
+  gc:
+    keep_releases: 2
+    builder_cache_budget: 3G
+    journal_budget: 200M
+  backup:
+    enabled: true
+  timers:
+    gc: daily
+
+packages: {}
+cloud: {}

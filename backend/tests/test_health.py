@@ -85,6 +85,11 @@ def test_probe_DM_26_health_matches_schema_11(
     PRODUCT_STORAGE_ADDRESS (DM-203); ``/health`` says it, held equal to
     ``primer.yaml`` by a test -- without it the machine's ``seams_verify``
     would answer ``provide-not-live`` on DM-160 (the owner's decision of 26.11).
+
+    Changed by DM-160, by the dispatcher's word: the Panel takes comms' two
+    seams (``app/seams.py`` ``TAKES``); these clients are built without them,
+    so the seams are honestly not satisfied. The pair -- with both, satisfied --
+    is ``test_probe_DM_160_health_is_satisfied_with_both_seams``.
     """
     client: TestClient = request.getfixturevalue(state)
     response = client.get("/health")
@@ -106,7 +111,7 @@ def test_probe_DM_26_health_matches_schema_11(
     assert body["uptime_s"] >= 0
     assert body["seams"] == {
         "provides": ["PRODUCT_STORAGE_ADDRESS"],
-        "requires_satisfied": True,
+        "requires_satisfied": False,
     }
     assert body["limits"] == {"max_upload_mb": MAX_UPLOAD_MB}
     assert body["edition"] == "core"

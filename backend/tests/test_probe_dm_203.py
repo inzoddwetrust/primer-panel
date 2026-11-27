@@ -10,6 +10,14 @@ pinned machine's own functions of ``seams_check`` read it with comms' seam,
 written out here from ``aivis-one/comms@5a193eb`` (v4.2.0): no network in CI.
 The value of the seam is the machine's, and it passes comms' rule of
 ``storage_address_problem`` (``app/core/channels.py`` there), written out too.
+
+Changed by DM-160, by the dispatcher's word: comms is the Panel's dependency
+now, in its edition, with both options -- the probe reads ``primer.yaml`` of
+this repository as it is, no copy built; the pair (no ``provides``) is the
+same file without its ``provides``. Every assertion stays as it was.
+DM-160: the Panel takes two seams of comms and gives it its profile; the
+literal carries what comms says of them -- its ``env`` of the three seams,
+``accepts.profile`` and ``provides``, from the same source, ``5a193eb``.
 """
 
 import re
@@ -31,9 +39,19 @@ stacks:
     compose: deploy/docker-compose.yml
     app: { service: comms-app, port: 8000, health: /health, ready: /ready }
 env:
+  COMMS_API_URL: { source: address }
+  COMMS_SERVICE_TOKEN: { source: minted }
   PRODUCT_STORAGE_ADDRESS: { source: seam, from: product }
+accepts:
+  profile:
+    validate: "comms validate --profile <dir>"
+    env: TEMPLATES_DIR
+    services: [comms-app, comms-worker, comms-consumer]
 requires:
   - PRODUCT_STORAGE_ADDRESS
+provides:
+  - COMMS_API_URL
+  - COMMS_SERVICE_TOKEN
 report: { health: /health, ready: /ready, logs: json, junit: true }
 """
 
@@ -46,13 +64,6 @@ PORT = re.compile(r"[1-9][0-9]{0,4}\Z")
 VALUE = "panel-storage-panel-storage:9000"
 ON = frozenset({"telegram", "login"})
 
-EDITIONS = "  core: { services: [] }"
-DEPENDENT = """  core: { services: [comms] }
-
-dependencies:
-  comms: { repo: git@github.com:aivis-one/comms.git, version: ">=4.2,<5" }
-
-options: [telegram, login]"""
 # The Panel's whole ``provides``: its one entry, with the key above it (a key
 # left with no entry is an explicit null, which the loader refuses).
 PROVIDED = re.compile(
@@ -63,8 +74,9 @@ PROVIDED = re.compile(
 
 
 def _copy(tmp: Path, text: str) -> tuple[Product, dict[str, Service]]:
-    assert text.count(EDITIONS) == 1
-    (tmp / "primer.yaml").write_text(text.replace(EDITIONS, DEPENDENT))
+    """``text`` -- the repository's primer.yaml as it is, or without its
+    ``provides`` -- and comms' literal, through the machine's loader."""
+    (tmp / "primer.yaml").write_text(text)
     (tmp / "comms.yaml").write_text(COMMS)
     product = load_primer_yaml(tmp / "primer.yaml")
     comms = load_primer_yaml(tmp / "comms.yaml")

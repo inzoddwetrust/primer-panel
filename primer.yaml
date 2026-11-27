@@ -2,8 +2,21 @@ schema: 1
 name: primer-panel                    # the name of its repository (contract 3 rule 32)
 kind: product
 
+dependencies:                         # services on the Panel's box; the exact version -- primer.lock
+  # comms (DM-160): it signs people in through Telegram for the Panel (the
+  # option login) and is the Panel's way to them (telegram). Its profile is data
+  # of the machine (form D, protocol 4.5): this repository's comms-profile/,
+  # checked by `comms validate --profile` before comms takes it.
+  comms: { repo: git@github.com:aivis-one/comms.git, version: ">=4.3,<5", data: { profile: comms-profile } }
+
 editions:                             # the backend checks the passport's choice again at start (rule 11)
-  core: { services: [] }
+  core: { services: [comms] }
+
+# The instance's options (contract 3 rules 36-38). Both required: without the
+# sign-in through comms the Panel lets no one in, and the sign-in is the bot's
+# (comms refuses login without telegram).
+options: [telegram, login]
+options_required: [telegram, login]
 
 languages: [en, ru]                   # every language the product has: its built-in texts
 
@@ -38,6 +51,10 @@ env:
   # key and the Panel's age key -- the two keys files, never variables
   OPS_REPO:          { source: param }                             # ssh://git@ssh.github.com:443/<owner>/<repo>.git
   OPS_WRITE_KEY:     { source: asked, file: { path: /run/panel/ops-write.key } }
+  # comms' sign-in module (DM-160): the address of its API and the token the
+  # Panel presents -- seams of comms; app/seams.py names them (TAKES)
+  COMMS_API_URL:       { source: seam, from: comms }
+  COMMS_SERVICE_TOKEN: { source: seam, from: comms }
   OPS_AGE_KEY:       { source: asked, file: { path: /run/panel/ops-age.key } }
   # The storage's root SECRET (DM-203): exactly 40 characters, as velo's --
   # RustFS takes a secret of 8..40, and a minted value is minted once. Its

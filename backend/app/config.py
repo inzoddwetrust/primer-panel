@@ -13,8 +13,9 @@ Sign-in returns the browser to the API's host and sends it on to the
 frontend's (DM-150).
 
 ``COMMS_API_URL`` and ``COMMS_SERVICE_TOKEN`` -- the sign-in module of comms
--- are optional until comms is a dependency of the Panel (DM-160 makes them
-required seams ``from: comms``); without them sign-in answers ``unavailable``.
+-- are seams ``from: comms`` (DM-160): on a box the compose file asks both.
+Here they stay optional, both or neither (DM-212): an application without
+them -- a test's -- answers sign-in ``unavailable``.
 
 ``OPS_REPO`` -- the address of ``primer-ops``, where the passports of the
 boxes live (DM-158): ``ssh://git@ssh.github.com:443/<owner>/<repo>.git``, the

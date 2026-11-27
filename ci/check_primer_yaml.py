@@ -24,9 +24,10 @@ from pridem.stacks.schema import load_primer_yaml
 
 
 def _alias(text: str) -> str:
+    # the edition as primer.yaml has it since comms is its dependency (DM-160)
     return text.replace(
-        "  core: { services: [] }",
-        "  core: &core { services: [] }\n  full: *core",
+        "  core: { services: [comms] }",
+        "  core: &core { services: [comms] }\n  full: *core",
     )
 
 

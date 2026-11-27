@@ -188,3 +188,15 @@ jobs:
         # The directory by its absolute path: pridem check names the verdict's
         # first step by the directory's name, and "." has none.
         run: pridem check "$GITHUB_WORKSPACE"
+      # The Panel's profile for comms (DM-160), checked as comms' start checks
+      # it, by the comms of primer.lock (its INTEGRATION.md section 3): comms is
+      # not a package -- its bin/comms on PYTHONPATH, its lock with hashes.
+      - name: comms validate --profile, by the comms of primer.lock
+        run: |
+          commit=$(python -c "from pathlib import Path; from pridem.stacks.lock import load_primer_lock; print(load_primer_lock(Path('primer.lock')).dependencies['comms'].commit)")
+          git clone https://github.com/aivis-one/comms.git "$RUNNER_TEMP/comms"
+          git -C "$RUNNER_TEMP/comms" checkout --detach "$commit"
+          test "$(git -C "$RUNNER_TEMP/comms" rev-parse HEAD)" = "$commit"
+          python -m venv "$RUNNER_TEMP/comms-venv"
+          "$RUNNER_TEMP/comms-venv/bin/pip" install --require-hashes -r "$RUNNER_TEMP/comms/requirements.lock"
+          PYTHONPATH="$RUNNER_TEMP/comms" "$RUNNER_TEMP/comms-venv/bin/python" "$RUNNER_TEMP/comms/bin/comms" validate --profile comms-profile
