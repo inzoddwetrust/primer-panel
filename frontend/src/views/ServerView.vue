@@ -15,6 +15,7 @@ import {
   label,
   missing,
   needsName,
+  rollsBack,
   type Button,
   type FormValues,
   type RunRow,
@@ -120,7 +121,7 @@ function submit(): void {
   }
   if (needsName(chosen.value, args, asked.value)) {
     pending.value = { expected: head.value.name, args }
-  } else if (chosen.value.sure) {
+  } else if (chosen.value.sure || rollsBack(chosen.value, args, head.value.machine_version)) {
     pending.value = { expected: null, args }
   } else {
     void send(args, false)

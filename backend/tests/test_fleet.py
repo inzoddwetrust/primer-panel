@@ -2,7 +2,8 @@
 what the box sent.
 
 Changed by DM-196: the Panel's machine is v0.1.10 -- the versions of the
-boxes here (current, behind, newer) follow it.
+boxes here (current, behind, newer) follow it. Changed by DM-218: it is
+v0.1.12, and so are they.
 
 The SQL of these tests carries the tests' own values only."""
 # ruff: noqa: S608
@@ -93,7 +94,7 @@ def server(
     project: str = "a",
     *,
     heard: timedelta | None = timedelta(seconds=5),
-    version: str = "0.1.10",
+    version: str = "0.1.12",
     state: dict[str, object] | None = None,
     verdicts: tuple[tuple[str, str, bool], ...] | list[tuple[str, str, bool]] = (),
     detached: bool = False,
@@ -217,10 +218,10 @@ def test_no_data_is_null_never_zero(world: World) -> None:
         "measured_at",
     ):
         assert row[field] is None, field
-    assert row["machine_release"] == "0.1.10"
+    assert row["machine_release"] == "0.1.12"
     server(world, "light", state=None)  # a heartbeat, no full form yet
     light = next(r for r in fleet(world) if r["name"] == "light")
-    assert light["machine_version"] == "0.1.10" and light["health"] is None
+    assert light["machine_version"] == "0.1.12" and light["health"] is None
 
 
 def test_the_facts_of_a_full_form(world: World) -> None:
@@ -254,7 +255,7 @@ def test_the_last_verdict_is_the_last_finished(world: World) -> None:
 
 
 def test_versions_are_compared_as_versions(world: World) -> None:
-    server(world, "newer", version="0.1.11", state=snapshot())
+    server(world, "newer", version="0.1.13", state=snapshot())
     server(world, "odd", version="not-a-version", state=snapshot())
     rows = {row["name"]: row["reasons"] for row in fleet(world)}
     assert rows == {"newer": [], "odd": []}
@@ -301,7 +302,7 @@ def test_a_full_heartbeat_reaches_the_fleet(world: World) -> None:
     box = registered(world, "velo-e2e")
     beat = {
         "measured_at": "2026-11-24T12:00:00Z",
-        "machine_version": "0.1.10",
+        "machine_version": "0.1.12",
         "lock_open_by": [],
         "journals_without_verdict": [],
         "state": snapshot(health="unhealthy"),

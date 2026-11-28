@@ -21,6 +21,9 @@ export interface Button {
   sure: boolean
   name: 'always' | 'when' | 'ask' | 'never'
   destructive_options: Record<string, unknown[]>
+  // The field whose release below the box's machine asks "are you sure?"
+  // (DM-218: `tag` of `self-update`); null -- none.
+  sure_below: string | null
 }
 
 export interface RunRow {
@@ -92,6 +95,30 @@ export function argsFrom(button: Button, values: FormValues): Record<string, unk
 // The required fields the form has left empty.
 export function missing(button: Button, args: Record<string, unknown>): string[] {
   return (button.schema.required ?? []).filter((name) => args[name] === undefined)
+}
+
+// A release as numbers -- `v0.1.12` and `0.1.12` alike; null -- none.
+function release(text: unknown): number[] | null {
+  if (typeof text !== 'string') return null
+  const found = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(text)
+  return found ? found.slice(1).map(Number) : null
+}
+
+// Whether the command turns the box's machine back to a lower release
+// (DM-218): the button names its field; "are you sure?" on any role.
+export function rollsBack(
+  button: Button,
+  args: Record<string, unknown>,
+  machine: string | null,
+): boolean {
+  if (button.sure_below === null) return false
+  const asked = release(args[button.sure_below])
+  const now = release(machine)
+  if (asked === null || now === null) return false
+  for (let at = 0; at < 3; at += 1) {
+    if (asked[at] !== now[at]) return (asked[at] ?? 0) < (now[at] ?? 0)
+  }
+  return false
 }
 
 // Whether the server's name is typed before the command goes (R-18): the

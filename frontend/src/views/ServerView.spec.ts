@@ -18,7 +18,7 @@ function head(role: string) {
     role,
     project: { id: 'pa', slug: 'velo', name: 'Velo', kind: 'product' },
     heartbeat_at: null,
-    machine_version: null,
+    machine_version: null as string | null,
     machine_release: '0.1.9',
     verdict: null,
     stacks: null,
@@ -41,6 +41,7 @@ function buttons(sure: boolean): Button[] {
       sure: false,
       name: 'never',
       destructive_options: {},
+      sure_below: null,
     },
     {
       verb: 'ssl',
@@ -50,6 +51,7 @@ function buttons(sure: boolean): Button[] {
       sure,
       name: 'never',
       destructive_options: {},
+      sure_below: null,
     },
     {
       verb: 'deploy',
@@ -59,6 +61,7 @@ function buttons(sure: boolean): Button[] {
       sure,
       name: 'never',
       destructive_options: {},
+      sure_below: null,
     },
     {
       verb: 'db',
@@ -75,6 +78,7 @@ function buttons(sure: boolean): Button[] {
       sure,
       name: 'when',
       destructive_options: { action: ['restore'] },
+      sure_below: null,
     },
     {
       verb: 'destroy',
@@ -84,6 +88,21 @@ function buttons(sure: boolean): Button[] {
       sure,
       name: 'always',
       destructive_options: {},
+      sure_below: null,
+    },
+    {
+      verb: 'self-update',
+      preset: {},
+      schema: {
+        type: 'object',
+        properties: { tag: { type: 'string', enum: ['v0.1.12', 'v0.1.13'] } },
+        required: ['tag'],
+      },
+      positionals: ['tag'],
+      sure,
+      name: 'never',
+      destructive_options: {},
+      sure_below: 'tag',
     },
     {
       verb: 'verb',
@@ -93,6 +112,7 @@ function buttons(sure: boolean): Button[] {
       sure,
       name: 'ask',
       destructive_options: {},
+      sure_below: null,
     },
   ]
 }
@@ -207,6 +227,44 @@ describe('a server’s card', () => {
     await wrapper.get('[data-test="command"]').trigger('submit')
     await flushPromises()
     expect(wrapper.find('[data-test="confirm"]').exists()).toBe(false)
+  })
+
+  it('asks "are you sure?" for a rollback of the machine, on test too (DM-218)', async () => {
+    const answered = answers('test', false)
+    answered['GET /api/v1/servers/s1'] = { ...head('test'), machine_version: '0.1.13' }
+    const { wrapper, asked } = await page(ServerView, { serverId: 's1' }, ME, answered)
+    await wrapper.get('[data-test="button-self-update"]').trigger('click')
+    await wrapper.get('[data-test="field-tag"] select').setValue('v0.1.12')
+    await wrapper.get('[data-test="command"]').trigger('submit')
+    expect(wrapper.find('[data-test="confirm"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="confirm-input"]').exists()).toBe(false) // no name
+    expect(asked.some((a) => a.method === 'POST')).toBe(false)
+    await wrapper.get('[data-test="confirm-yes"]').trigger('click')
+    await flushPromises()
+    expect(asked.find((a) => a.method === 'POST')?.body).toEqual({
+      verb: 'self-update',
+      args: { tag: 'v0.1.12' },
+      confirmed: true,
+    })
+  })
+
+  it('the pair: a release up, or the same, goes with no question', async () => {
+    for (const tag of ['v0.1.13', 'v0.1.12']) {
+      const answered = answers('test', false)
+      answered['GET /api/v1/servers/s1'] = { ...head('test'), machine_version: '0.1.12' }
+      const { wrapper, asked } = await page(ServerView, { serverId: 's1' }, ME, answered)
+      await wrapper.get('[data-test="button-self-update"]').trigger('click')
+      await wrapper.get('[data-test="field-tag"] select').setValue(tag)
+      await wrapper.get('[data-test="command"]').trigger('submit')
+      await flushPromises()
+      expect(wrapper.find('[data-test="confirm"]').exists()).toBe(false)
+      expect(asked.find((a) => a.method === 'POST')?.body).toEqual({
+        verb: 'self-update',
+        args: { tag },
+        confirmed: false,
+      })
+      wrapper.unmount()
+    }
   })
 
   it('keeps a required field required', async () => {

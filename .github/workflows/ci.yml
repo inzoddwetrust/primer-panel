@@ -18,9 +18,9 @@ permissions:
 
 env:
   # The machine whose loader, pridem check and conformance read the Panel,
-  # and whose contract 4 the Panel speaks to boxes (DM-153): release v0.1.10
+  # and whose contract 4 the Panel speaks to boxes (DM-153): release v0.1.12
   # of inzoddwetrust/primer -- the commit of the wheel in requirements.lock.
-  PRIDEM_COMMIT: bb29c6c1c87e8e7f3dc1265d11442c7c5599618d
+  PRIDEM_COMMIT: 5d0c9d4caa45ce2da0c5f39d764a9549f68c99da
 
 jobs:
   backend:

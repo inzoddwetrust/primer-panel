@@ -17,6 +17,8 @@ command in a server's queue, the server's commands.
   ``confirm`` is the server's name, typed exactly (R-18); on ``prod`` every
   action but reading comes confirmed. Then it is ``queued``, with an audit
   row. Changed by DM-155: the rules of verbs moved to ``app.agent.verbs``.
+  Changed by DM-218: ``self-update`` -- refused for a box whose machine has
+  no such verb or is not known; a rollback of the machine comes confirmed.
 - **What a server's card reads** (DM-155): its runs, the last first, and the
   buttons the person has on it (``app.agent.verbs.buttons``).
 - **A server of a project the person does not see is "not found"**, as every
@@ -45,7 +47,14 @@ from app.access.rules import (
     ServerScope,
     ServerWrite,
 )
-from app.agent.models import Command, CommandState, RegistrationToken, Run, Verdict
+from app.agent.models import (
+    Command,
+    CommandState,
+    RegistrationToken,
+    Run,
+    ServerState,
+    Verdict,
+)
 from app.agent.queue import expire_taken
 from app.agent.verbs import (
     CONFIRM,
@@ -53,7 +62,9 @@ from app.agent.verbs import (
     destructive,
     needed_permission,
     needs_sure,
+    no_self_update,
     not_a_button,
+    rolls_back,
 )
 from app.audit.models import ActorKind
 from app.audit.service import record
@@ -229,6 +240,17 @@ async def enqueue(found: ServerScope, body: CommandIn, needed_of: Needed) -> Com
         raise PanelError(ErrorClass.INVALID, "confirm goes with a destructive command")
     if needs_sure(body.verb, body.args, server.role) and not body.confirmed:
         raise PanelError(ErrorClass.CONFLICT, "A command on prod is confirmed first")
+    # self-update (DM-218): a box whose agent has no such verb is refused
+    # here; a release below the box's machine is a rollback, confirmed
+    state = await scope.session.get(ServerState, server.id)
+    machine = None if state is None else state.machine_version
+    cannot = no_self_update(body.verb, machine)
+    if cannot is not None:
+        raise PanelError(ErrorClass.INVALID, cannot)
+    if rolls_back(body.verb, body.args, machine) and not body.confirmed:
+        raise PanelError(
+            ErrorClass.CONFLICT, "A rollback of the machine is confirmed first"
+        )
     await expire_taken(scope.session, server.id)
     command = Command(
         server_id=server.id,
@@ -322,6 +344,9 @@ class ButtonOut(BaseModel):
     sure: bool
     name: str
     destructive_options: dict[str, list[object]]
+    sure_below: str | None
+    """The field whose release below the box's machine asks "are you sure?"
+    (DM-218: ``tag`` of ``self-update``); ``None`` -- none."""
 
 
 @router.get("/servers/{server_id}/verbs", response_model_by_alias=True)
@@ -336,6 +361,7 @@ async def list_buttons(found: AboutServer) -> list[ButtonOut]:
             sure=button.sure,
             name=button.name,
             destructive_options=button.destructive_options,
+            sure_below=button.sure_below,
         )
         for button in buttons(found.server.role, found.scope.permissions)
     ]

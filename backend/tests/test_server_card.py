@@ -54,44 +54,49 @@ def commands(world: World) -> object:
     return query_scalar(world.url, "SELECT count(*) FROM commands")
 
 
-# The buttons, written out (not VERBS of the code): the pinned release v0.1.10.
+# The buttons, written out (not VERBS of the code): the pinned release v0.1.12
+# (changed by DM-218): ``self-update`` is one, and they come in the machine's
+# groups -- server, deploy, data, host, project -- the registry's order inside
+# a group.
 READING = ["status"]
 DEPLOY = [
-    "gc",
-    "ssl:renew",
-    "install",
-    "update",
-    "deploy",
-    "rollback",
     "doctor",
     "start",
     "stop",
     "restart",
-]
-ALL_BUTTONS = [
-    "status",
-    "gc",
-    "ssl:renew",
     "install",
     "update",
     "deploy",
     "rollback",
+    "gc",
+    "ssl:renew",
+]
+ALL_BUTTONS = [
+    "status",
+    "self-update",
     "doctor",
+    "start",
+    "stop",
+    "restart",
+    "install",
+    "update",
+    "deploy",
+    "rollback",
     "reinstall",
     "destroy",
     "db",
     "backup",
     "seed",
+    "gc",
+    "ssl:renew",
     "verb",
-    "start",
-    "stop",
-    "restart",
 ]
 
 
 # What is not a button, written out (not VERBS of the code): the pinned release
-# v0.1.10 -- the verbs without a verdict, the values of a field that write none
-# and NOT_A_BUTTON (DM-202), as labels and as commands.
+# (v0.1.12 since DM-218, the same list as v0.1.10) -- the verbs without a
+# verdict, the values of a field that write none and NOT_A_BUTTON (DM-202), as
+# labels and as commands.
 NOT_BUTTONS = [
     "version",
     "state",
@@ -134,7 +139,12 @@ def test_probe_DM_155_no_button_without_permission(world: World) -> None:
     Changed by DM-202, by the dispatcher's word on its gate: a button is a verb
     that ends with a verdict -- ``version``, ``state``, ``report``, ``logs``
     and ``ssl status`` are no buttons any more, so ``READING`` is ``status``
-    alone and the lists are of the pinned release v0.1.10."""
+    alone and the lists are of the pinned release v0.1.10.
+
+    Changed by DM-218, by the dispatcher's word on its gate (R6): the pin is
+    v0.1.12 -- ``self-update`` is a button, of ``servers`` (the superadmin's
+    list has it, the staff's of ``deploy_test`` has not), and the buttons come
+    in the machine's groups. The assertions are as they were."""
     test, prod = server(world, "velo-test"), server(world, "velo-prod", "prod")
     staff = labels(world, "staff_a", test)  # deploy_test
     assert sorted(staff) == sorted(READING + DEPLOY)

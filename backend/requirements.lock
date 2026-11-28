@@ -676,8 +676,8 @@ packaging==26.3 \
     # via
     #   panel-backend (pyproject.toml)
     #   pridem
-pridem @ https://github.com/inzoddwetrust/primer/releases/download/v0.1.10/pridem-0.1.10-py3-none-any.whl \
-    --hash=sha256:300fa81b51577ec2e73f58e7329acaf3b5e820db96ecbd5229154c94d93bc314
+pridem @ https://github.com/inzoddwetrust/primer/releases/download/v0.1.12/pridem-0.1.12-py3-none-any.whl \
+    --hash=sha256:a748e8c2b6f726157d73b35d3b7bda853629e948ac83b86e3cebe8b104ac7402
     # via panel-backend (pyproject.toml)
 pycparser==3.12 \
     --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e \

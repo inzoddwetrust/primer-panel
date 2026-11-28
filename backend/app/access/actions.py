@@ -46,6 +46,7 @@ class Action(StrEnum):
     REINSTALL = "reinstall"
     DESTROY = "destroy"
     VERB = "verb"
+    SELF_UPDATE = "self-update"  # the machine updates itself (DM-163, DM-218)
     # Actions of the Panel.
     PASSPORT_EDIT = "passport.edit"
     PASSPORT_APPLY = "passport.apply"
@@ -103,6 +104,10 @@ ACTION_PERMISSION: Mapping[Action, Permission | ByRole | None] = {
     Action.REINSTALL: Permission.DESTRUCTIVE,
     Action.DESTROY: Permission.DESTRUCTIVE,
     Action.VERB: Permission.PROJECT_VERBS,
+    # The machine's own release (DM-218): who installs the machine on a box by
+    # its first contact -- the token of "add a server" -- updates it, on any
+    # role.
+    Action.SELF_UPDATE: Permission.SERVERS,
     Action.PASSPORT_EDIT: Permission.PASSPORT,
     Action.PASSPORT_APPLY: Permission.PASSPORT,
     Action.SERVER_ADD: Permission.SERVERS,

@@ -29,7 +29,7 @@ dependencies = [
     # agent) and its verbs (DM-153): the wheel of its GitHub Release by its
     # address and hash -- the one exception to the rule of 14 days, the
     # machine's own release (the owner's word of 24.11).
-    "pridem @ https://github.com/inzoddwetrust/primer/releases/download/v0.1.10/pridem-0.1.10-py3-none-any.whl",
+    "pridem @ https://github.com/inzoddwetrust/primer/releases/download/v0.1.12/pridem-0.1.12-py3-none-any.whl",
 ]
 
 [project.optional-dependencies]

@@ -45,9 +45,9 @@ def state(
 
 def test_a_token_comes_with_the_release_and_its_install(world: World) -> None:
     made = issue(world)
-    assert made["release"] == "0.1.10"
+    assert made["release"] == "0.1.12"  # changed by DM-218: the pin
     assert made["install_url"] == (
-        "https://github.com/inzoddwetrust/primer/releases/download/v0.1.10/install.sh"
+        "https://github.com/inzoddwetrust/primer/releases/download/v0.1.12/install.sh"
     )
     assert made["box_refusals"] == BOX_REFUSALS
     assert len(str(made["token"])) >= 16

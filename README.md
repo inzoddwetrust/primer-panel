@@ -159,4 +159,4 @@ whose name ends with `_test`, and `REDIS_URL` of Redis database 15.
 CI (`.github/workflows/ci.yml`) runs four jobs: backend, frontend, image
 (the probes) and check (`primer.yaml` through the machine's loader,
 `pridem check` of the repository, the pins of the images). The machine is
-release v0.1.10, `PRIDEM_COMMIT` in the workflow.
+release v0.1.12, `PRIDEM_COMMIT` in the workflow.

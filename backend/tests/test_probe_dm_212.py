@@ -290,9 +290,10 @@ def test_probe_DM_212_a_damaged_session_is_401(signin: SignIn, redis_url: str) -
 
 def test_the_readme_says_the_machine_and_the_limits() -> None:
     """README, written out where it was false (DM-212): the pinned machine, the
-    page ``/`` (the fleet) and ``/me``, the limits of R1 of the gate."""
+    page ``/`` (the fleet) and ``/me``, the limits of R1 of the gate. Changed
+    by DM-218: the pinned machine is v0.1.12."""
     text = (REPO / "README.md").read_text()
-    assert "release v0.1.10" in text and "release v0.1.8" not in text
+    assert "release v0.1.12" in text and "release v0.1.10" not in text
     assert "`/me` -- the person of" in text
     for said in ("20 each", "10 each", "`/64`", "try_later", "429"):
         assert said in text, said

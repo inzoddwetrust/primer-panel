@@ -53,6 +53,7 @@ from app.agent.verbs import (
     needed_permission,
     needs_sure,
     not_a_button,
+    rolls_back,
 )
 from app.core.errors import ErrorClass, PanelError
 from app.core.state import Core, get_core
@@ -118,7 +119,12 @@ async def _run(session: AsyncSession, server_id: uuid.UUID, run_id: str) -> Run:
     return run
 
 
-def _repeat(found: ServerScope, header: dict[str, object] | None) -> Repeat | None:
+def _repeat(
+    found: ServerScope, header: dict[str, object] | None, machine: str | None
+) -> Repeat | None:
+    """The run's command again, when it is a button the person has; ``sure``
+    -- on ``prod``, and for a rollback of the machine (DM-218): ``machine``
+    is the box's machine now, by its heartbeat."""
     if header is None:
         return None
     verb, given = header.get("verb"), header.get("args")
@@ -139,7 +145,7 @@ def _repeat(found: ServerScope, header: dict[str, object] | None) -> Repeat | No
     return Repeat(
         verb=verb,
         args=args,
-        sure=needs_sure(verb, args, role),
+        sure=needs_sure(verb, args, role) or rolls_back(verb, args, machine),
         name=destructive(verb, original),
     )
 
@@ -171,6 +177,8 @@ async def run_page(run_id: str, found: AboutServer) -> RunPage:
         select(Event.body).where(Event.run_id == run_id, Event.seq == 1)
     )
     lines = await _gapless(session, run_id, 0)
+    state = await session.get(ServerState, found.server.id)
+    machine = None if state is None else state.machine_version
     body = None if verdict is None else verdict.body
     return RunPage(
         run_id=run.run_id,
@@ -190,7 +198,7 @@ async def run_page(run_id: str, found: AboutServer) -> RunPage:
             verified=verdict.verified,
         ),
         report_llm=None if verdict is None else verdict.report_llm,
-        repeat=_repeat(found, header),
+        repeat=_repeat(found, header, machine),
         last_seq=len(lines),
         key_wait=await key_wait(session, run_id),
     )

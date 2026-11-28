@@ -18,6 +18,15 @@ same file without its ``provides``. Every assertion stays as it was.
 DM-160: the Panel takes two seams of comms and gives it its profile; the
 literal carries what comms says of them -- its ``env`` of the three seams,
 ``accepts.profile`` and ``provides``, from the same source, ``5a193eb``.
+
+Changed by DM-218, by the dispatcher's word on its gate (R5): comms is
+v4.3.0 (``aivis-one/comms@690fb8d``, the Panel's ``primer.lock``), whose seam
+``PRODUCT_STORAGE_ADDRESS`` is under ``when: llm``, and the machine is v0.1.12,
+which needs no seam whose option is off (DM-122) -- v0.1.10 did not know
+``when`` of a ``requires``. So the probe says three things: with the Panel's
+options (``telegram``, ``login``) there is neither the pair nor a half seam,
+``provides`` or not; with ``llm`` on there is the pair, its value by comms'
+rule; with ``llm`` on and no ``provides`` -- the half seam.
 """
 
 import re
@@ -28,8 +37,8 @@ from pridem.stacks.schema import Product, Service, load_primer_yaml
 
 PANEL = Path(__file__).resolve().parents[2] / "primer.yaml"
 
-# comms v4.2.0, the part of its primer.yaml its seam with a product stands on,
-# written out (aivis-one/comms@5a193eb).
+# comms v4.3.0, the part of its primer.yaml its seam with a product stands on,
+# written out (aivis-one/comms@690fb8d; was v4.2.0, 5a193eb).
 COMMS = """schema: 1
 name: comms
 kind: service
@@ -41,7 +50,7 @@ stacks:
 env:
   COMMS_API_URL: { source: address }
   COMMS_SERVICE_TOKEN: { source: minted }
-  PRODUCT_STORAGE_ADDRESS: { source: seam, from: product }
+  PRODUCT_STORAGE_ADDRESS: { source: seam, from: product, when: llm }
 accepts:
   profile:
     validate: "comms validate --profile <dir>"
@@ -63,6 +72,9 @@ PORT = re.compile(r"[1-9][0-9]{0,4}\Z")
 
 VALUE = "panel-storage-panel-storage:9000"
 ON = frozenset({"telegram", "login"})
+"""The Panel's own options (its ``options_required``)."""
+LLM = ON | {"llm"}
+"""The options with comms' ``llm`` on: the seam is needed."""
 
 # The Panel's whole ``provides``: its one entry, with the key above it (a key
 # left with no entry is an explicit null, which the loader refuses).
@@ -84,23 +96,35 @@ def _copy(tmp: Path, text: str) -> tuple[Product, dict[str, Service]]:
     return product, {"comms": comms}
 
 
-def _findings(product: Product, services: dict[str, Service]) -> dict[str, list[str]]:
+def _findings(
+    product: Product, services: dict[str, Service], on: frozenset[str] = ON
+) -> dict[str, list[str]]:
     """Every function of the machine's ``seams_check`` (``steps/env.py``)."""
     edition = "core"
     return {
-        "half_seams": seams.half_seams(product, services, edition, on=ON),
+        "half_seams": seams.half_seams(product, services, edition, on=on),
         "seams_under_option": seams.seams_under_option(
-            product, services, edition, on=ON
+            product, services, edition, on=on
         ),
         "network_collisions": seams.network_collisions(
-            seams.pairs(product, services, edition, on=ON)
+            seams.pairs(product, services, edition, on=on)
         ),
-        "outside_edition": seams.outside_edition(product, edition, on=ON),
+        "outside_edition": seams.outside_edition(product, edition, on=on),
         "routes_on_co_located": seams.routes_on_co_located(
-            product, services, edition, on=ON
+            product, services, edition, on=on
         ),
-        "unaccepted": seams.unaccepted(product, services, edition, on=ON),
+        "unaccepted": seams.unaccepted(product, services, edition, on=on),
     }
+
+
+NOTHING: dict[str, list[str]] = {
+    "half_seams": [],
+    "seams_under_option": [],
+    "network_collisions": [],
+    "outside_edition": [],
+    "routes_on_co_located": [],
+    "unaccepted": [],
+}
 
 
 def _address(value: str) -> bool:
@@ -114,20 +138,23 @@ def _address(value: str) -> bool:
 
 
 def test_probe_DM_203_seam_is_whole_with_comms(tmp_path: Path) -> None:
-    """No half seam, nothing else of ``seams_check``; one pair, the storage's
-    point for comms; the value is ``host:port`` by comms' rule. The pair: the
-    same copy without the Panel's ``provides`` is a half seam."""
+    """With the Panel's options -- ``llm`` off -- nothing of ``seams_check``
+    and no pair: the seam is off, with ``provides`` and without. With ``llm``
+    on: nothing of ``seams_check``, one pair, the storage's point for comms,
+    its value ``host:port`` by comms' rule. The pair of the probe: ``llm`` on
+    and no ``provides`` -- the half seam."""
     text = PANEL.read_text()
+    without, count = PROVIDED.subn("", text)
+    assert count == 1 and "\nprovides:" not in without
+    # llm off: neither the pair nor a half seam, provides or not
+    for given in (text, without):
+        product, services = _copy(tmp_path, given)
+        assert _findings(product, services) == NOTHING
+        assert seams.pairs(product, services, "core", on=ON) == []
+    # llm on: the pair
     product, services = _copy(tmp_path, text)
-    assert {name: found for name, found in _findings(product, services).items()} == {
-        "half_seams": [],
-        "seams_under_option": [],
-        "network_collisions": [],
-        "outside_edition": [],
-        "routes_on_co_located": [],
-        "unaccepted": [],
-    }
-    [pair] = seams.pairs(product, services, "core", on=ON)
+    assert _findings(product, services, LLM) == NOTHING
+    [pair] = seams.pairs(product, services, "core", on=LLM)
     assert (pair.provider, pair.endpoint, pair.consumer, pair.variable) == (
         "panel-storage",
         "files",
@@ -137,11 +164,9 @@ def test_probe_DM_203_seam_is_whole_with_comms(tmp_path: Path) -> None:
     value = seams.product_value(product, None, "PRODUCT_STORAGE_ADDRESS")  # type: ignore[arg-type]
     assert value == VALUE
     assert _address(value)
-
-    without, count = PROVIDED.subn("", text)
-    assert count == 1 and "\nprovides:" not in without
+    # llm on, no provides: the half seam
     half, services = _copy(tmp_path, without)
-    assert seams.half_seams(half, services, "core", on=ON) == [
+    assert seams.half_seams(half, services, "core", on=LLM) == [
         "comms.PRODUCT_STORAGE_ADDRESS: the product does not provide it"
     ]
 
